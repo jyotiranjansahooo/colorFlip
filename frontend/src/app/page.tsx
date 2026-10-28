@@ -2,6 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { socket } from "@/lib/socket";
+import dynamic from "next/dynamic";
+import { Suspense } from "react";
+import {
+  ArrowLeft,
+  Check,
+  CircleHelp,
+  Copy,
+  Layers,
+  Palette,
+  RotateCcw,
+  Settings,
+  Shuffle,
+  Wifi,
+  WifiOff,
+  X,
+} from "lucide-react";
 
 type CardColor = "red" | "blue" | "green" | "yellow";
 
@@ -48,10 +64,10 @@ const RECONNECT_STORAGE_KEY = "colorflip-reconnect";
 const validColors: CardColor[] = ["red", "blue", "green", "yellow"];
 
 const cardColors: Record<CardColor, string> = {
-  red: "bg-red-600 text-white",
-  blue: "bg-blue-700 text-white",
-  green: "bg-emerald-600 text-white",
-  yellow: "bg-amber-300 text-slate-950",
+  red: "card-red",
+  blue: "card-blue",
+  green: "card-green",
+  yellow: "card-yellow",
 };
 
 const colorPickerStyles: Record<CardColor, string> = {
@@ -106,7 +122,13 @@ function makeGuestName(): string {
 
   return adjective + noun + number;
 }
-
+const LazyCardShowcase = dynamic(() => import("@/components/CardShowcase"), {
+  loading: () => (
+    <div className="card-showcase-fallback" role="status">
+      Loading card showcase...
+    </div>
+  ),
+});
 export default function Home() {
   const [name, setName] = useState("");
   const [roomCode, setRoomCode] = useState("");
@@ -425,8 +447,7 @@ export default function Home() {
     : "Player";
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-slate-950 text-white">
-      {/* Header */}
+    <main className="min-h-screen overflow-x-hidden text-white">
       <header className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-4 sm:px-6 md:px-12">
         <button
           type="button"
@@ -434,9 +455,14 @@ export default function Home() {
           aria-label="ColorFlip home"
           className="shrink-0 text-xl font-black tracking-tight sm:text-2xl"
         >
-          <span className="text-sky-300">Color</span>
+          <span className="text-rose-100">Color</span>
           <span className="text-white">Flip</span>
-          <span className="ml-2 text-lg sm:text-xl">🃏</span>
+          <span
+            aria-hidden="true"
+            className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 bg-white text-xs font-black text-rose-700"
+          >
+            CF
+          </span>
         </button>
 
         <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-2 text-xs sm:px-4 sm:text-sm">
@@ -565,8 +591,7 @@ export default function Home() {
               <h1 className="text-5xl font-black leading-tight sm:text-6xl md:text-7xl">
                 Ready to
                 <br />
-                <span className="text-sky-300">flip the</span>
-                <br />
+                <span className="text-rose-100">flip the</span> <br />
                 game?
               </h1>
 
@@ -574,7 +599,15 @@ export default function Home() {
                 Create a private room, invite your friends, and see who can get
                 rid of all their cards first.
               </p>
-
+              <Suspense
+                fallback={
+                  <div className="card-showcase-fallback" role="status">
+                    Preparing your cards...
+                  </div>
+                }
+              >
+                <LazyCardShowcase />
+              </Suspense>
               <div className="mt-7 flex flex-wrap gap-2 sm:mt-10 sm:gap-3">
                 {[
                   { label: "Royal Blue", color: "bg-blue-700" },
@@ -746,7 +779,7 @@ export default function Home() {
                       className="flex items-center gap-4 rounded-2xl border border-slate-700 bg-slate-800 p-4"
                     >
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-400/10 text-xl">
-                        {player.id === room.hostId ? "👑" : "🎮"}
+                        {player.id === room.hostId ? "HOST" : "PLAYER"}{" "}
                       </div>
 
                       <div className="min-w-0">
@@ -785,179 +818,271 @@ export default function Home() {
               </div>
             ) : game ? (
               /* Game board */
-              <div className="mt-6 rounded-3xl border border-slate-700 bg-slate-900 p-4 sm:mt-8 sm:p-6 md:p-8">
-                <div className="flex flex-wrap justify-between gap-4">
+              <div className="game-table mt-6 p-4 sm:mt-8 sm:p-6 md:p-8">
+                <div className="game-table-glow" />
+
+                {/* Game header */}
+                <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs tracking-widest text-slate-400">
-                      PLAYERS
+                    <p className="text-xs font-bold tracking-[0.2em] text-white/70">
+                      COLORFLIP ARENA
                     </p>
-
-                    <p className="mt-1 font-bold">
-                      {room.players.length} players
+                    <p className="mt-1 text-lg font-black sm:text-xl">
+                      {room.players.length} Players
                     </p>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-xs tracking-widest text-slate-400">
-                      CURRENT COLOR
-                    </p>
-
-                    <p className="mt-1 inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 font-bold capitalize">
-                      <span
-                        className={
-                          "h-2.5 w-2.5 rounded-full " +
-                          (game.currentColor === "red"
-                            ? "bg-red-500"
-                            : game.currentColor === "blue"
-                              ? "bg-sky-400"
-                              : game.currentColor === "green"
-                                ? "bg-emerald-400"
-                                : "bg-amber-300")
-                        }
-                      />
+                  <div className="flex items-center gap-2 rounded-full border border-white/20 bg-black/15 px-3 py-2">
+                    <Palette size={16} aria-hidden="true" />
+                    <span className="text-xs font-bold uppercase tracking-wider">
                       {game.currentColor}
-                    </p>
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={
+                        "h-3 w-3 rounded-full " +
+                        (game.currentColor === "red"
+                          ? "bg-red-400"
+                          : game.currentColor === "blue"
+                            ? "bg-blue-400"
+                            : game.currentColor === "green"
+                              ? "bg-green-400"
+                              : "bg-yellow-300")
+                      }
+                    />
                   </div>
                 </div>
 
-                {/* Player cards */}
-                <div className="mt-5 grid grid-cols-2 gap-2 sm:mt-8 sm:grid-cols-4 sm:gap-3">
-                  {room.players.map((player, index) => (
-                    <div
-                      key={player.id}
-                      className={
-                        "min-w-0 rounded-xl border p-3 " +
-                        (game.currentPlayerIndex === index
-                          ? "border-sky-400 bg-blue-700/20"
-                          : "border-slate-700 bg-slate-800")
-                      }
-                    >
-                      <p className="truncate text-sm font-semibold">
-                        {player.name}
-                        {player.id === playerId ? " (You)" : ""}
-                      </p>
+                {/* Players around the table */}
+                <div className="relative z-10 mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:grid-cols-4">
+                  {room.players.map((player, index) => {
+                    const isCurrentPlayer = game.currentPlayerIndex === index;
+                    const isYou = player.id === playerId;
 
-                      <p className="mt-1 text-xs text-slate-400">
-                        🃏 {player.cardCount} cards
-                      </p>
+                    return (
+                      <div
+                        key={player.id}
+                        className={
+                          "player-token " +
+                          (isCurrentPlayer ? "player-token-active" : "")
+                        }
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <div className="player-token-avatar">
+                            {isCurrentPlayer ? (
+                              <RotateCcw size={17} aria-hidden="true" />
+                            ) : (
+                              <Layers size={17} aria-hidden="true" />
+                            )}
+                          </div>
 
-                      {game.currentPlayerIndex === index &&
-                        room.status === "playing" && (
-                          <p className="mt-1 text-xs font-semibold text-sky-300">
-                            Current turn
-                          </p>
-                        )}
+                          <div className="min-w-0">
+                            <p className="player-token-name">
+                              {player.name}
+                              {isYou ? " (You)" : ""}
+                            </p>
+                            <p className="player-token-count">
+                              {player.cardCount} cards
+                            </p>
+                          </div>
+                        </div>
 
-                      {!player.connected && (
-                        <p className="mt-1 text-xs text-rose-300">
-                          Disconnected
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span
+                            className={
+                              "text-[10px] font-bold uppercase tracking-wider " +
+                              (isCurrentPlayer
+                                ? "text-yellow-200"
+                                : "text-white/55")
+                            }
+                          >
+                            {isCurrentPlayer ? "Current turn" : "In game"}
+                          </span>
+
+                          {!player.connected && (
+                            <WifiOff
+                              size={13}
+                              className="text-red-200"
+                              aria-label="Disconnected"
+                            />
+                          )}
+
+                          {player.connected && (
+                            <Wifi
+                              size={13}
+                              className="text-green-200"
+                              aria-label="Connected"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                {/* Draw pile and discard pile */}
-                <div className="mt-6 flex min-h-40 items-center justify-center gap-6 rounded-2xl bg-slate-950 p-4 sm:mt-10 sm:min-h-48 sm:gap-8 sm:p-6">
-                  <div className="text-center">
-                    <p className="mb-3 text-xs text-slate-400">DRAW PILE</p>
+                {/* Central card piles */}
+                <div className="relative z-10 mt-7 flex min-h-44 items-center justify-center gap-8 rounded-[28px] border border-white/10 bg-black/10 px-3 py-6 sm:mt-9 sm:min-h-56 sm:gap-12 sm:py-8">
+                  <div className="game-pile">
+                    <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-white/70 sm:text-xs">
+                      DRAW PILE
+                    </p>
 
-                    <div className="flex h-24 w-16 items-center justify-center rounded-xl border-4 border-white bg-gradient-to-br from-sky-400 via-blue-700 to-emerald-500 text-xl font-black sm:h-28 sm:w-20 sm:text-2xl">
-                      CF
-                    </div>
+                    <button
+                      type="button"
+                      onClick={drawCard}
+                      disabled={!isMyTurn || room.status !== "playing"}
+                      aria-label={
+                        "Draw a card. " +
+                        game.drawPileCount +
+                        " cards remaining"
+                      }
+                      className="flip-card flip-card-back disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <span className="flip-card-back-inner">
+                        <span className="text-2xl font-black italic sm:text-3xl">
+                          CF
+                        </span>
+                        <span className="mt-1 text-[8px] font-black tracking-[0.18em] sm:text-[9px]">
+                          COLORFLIP
+                        </span>
+                      </span>
+                    </button>
 
-                    <p className="mt-2 text-xs text-slate-400">
+                    <p className="mt-3 text-center text-xs font-semibold text-white/75">
                       {game.drawPileCount} cards
                     </p>
                   </div>
 
-                  <div className="text-center">
-                    <p className="mb-3 text-xs text-slate-400">TOP CARD</p>
+                  <div className="game-pile">
+                    <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-white/70 sm:text-xs">
+                      DISCARD PILE
+                    </p>
 
                     {topCard ? (
                       <div
                         className={
-                          "flex h-24 w-16 rotate-3 items-center justify-center rounded-xl border-4 border-white text-lg font-black shadow-lg sm:h-28 sm:w-20 sm:text-2xl " +
+                          "flip-card pile-card " +
                           cardColors[topCard.color ?? game.currentColor]
                         }
+                        aria-label={
+                          (topCard.color ?? game.currentColor) +
+                          " " +
+                          topCard.value
+                        }
                       >
-                        {topCard.value.toUpperCase()}
+                        <span className="flip-card-corner">
+                          {topCard.value.toUpperCase()}
+                        </span>
+                        <span className="flip-card-value">
+                          {topCard.value.toUpperCase()}
+                        </span>
                       </div>
                     ) : (
-                      <div className="flex h-24 w-16 items-center justify-center rounded-xl border border-white/20 text-xs text-slate-500 sm:h-28 sm:w-20">
+                      <div className="flip-card flex items-center justify-center bg-black/20 text-xs text-white/60">
                         Empty
                       </div>
                     )}
+
+                    <p className="mt-3 text-center text-xs font-semibold text-white/75">
+                      Top card
+                    </p>
                   </div>
                 </div>
 
-                {/* Turn status */}
-                <div className="mt-6 text-center">
+                {/* Turn message */}
+                <div className="relative z-10 mt-6 text-center">
                   {room.status === "finished" ? (
-                    <h2 className="text-xl font-black text-sky-300 sm:text-2xl">
-                      🏆 {winnerName} wins!
+                    <h2 className="inline-flex items-center gap-2 rounded-full border border-yellow-200/40 bg-black/20 px-5 py-3 text-lg font-black text-yellow-100 sm:text-2xl">
+                      <Check size={22} aria-hidden="true" />
+                      {winnerName} wins!
                     </h2>
                   ) : (
                     <p
                       className={
-                        "inline-flex items-center rounded-full border px-4 py-2 text-sm font-bold sm:text-base " +
-                        (isMyTurn
-                          ? "border-sky-400/40 bg-blue-700/20 text-sky-200"
-                          : "border-slate-700 bg-slate-800 text-slate-300")
+                        "turn-message " +
+                        (isMyTurn ? "turn-message-active" : "")
                       }
                     >
                       {isMyTurn
-                        ? "✨ Your turn — play a card or draw"
+                        ? "Your turn — play a card or draw"
                         : "Waiting for the next turn"}
                     </p>
                   )}
                 </div>
 
                 {/* Player hand */}
-                <div className="mt-7">
-                  <h2 className="mb-3 text-lg font-bold">
-                    Your cards ({game.hand.length})
-                  </h2>
-
-                  <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-4 sm:flex-wrap sm:justify-center sm:gap-3 sm:overflow-visible">
-                    {game.hand.map((card) => (
-                      <button
-                        type="button"
-                        key={card.id}
-                        onClick={() => playCard(card)}
-                        disabled={!isMyTurn || room.status !== "playing"}
-                        title={card.value}
-                        aria-label={
-                          card.color
-                            ? card.color + " " + card.value
-                            : "Wild " + card.value
-                        }
-                        className={
-                          "flex h-24 w-16 shrink-0 snap-start items-center justify-center rounded-xl border-4 border-white text-base font-black shadow-md disabled:cursor-not-allowed disabled:opacity-50 sm:h-28 sm:w-20 sm:text-lg " +
-                          (card.color
-                            ? cardColors[card.color]
-                            : "bg-blue-700 text-white")
-                        }
-                      >
-                        {card.value.toUpperCase()}
-                      </button>
-                    ))}
+                <div className="relative z-10 mt-7">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-black sm:text-xl">Your hand</h2>
+                    <span className="rounded-full border border-white/20 bg-black/15 px-3 py-1.5 text-xs font-bold">
+                      {game.hand.length} cards
+                    </span>
                   </div>
 
-                  <p className="text-xs text-slate-500 sm:hidden">
-                    Swipe sideways to view all your cards.
+                  {game.hand.length > 0 ? (
+                    <div className="game-hand">
+                      {game.hand.map((card) => (
+                        <button
+                          type="button"
+                          key={card.id}
+                          onClick={() => playCard(card)}
+                          disabled={!isMyTurn || room.status !== "playing"}
+                          title={
+                            card.color
+                              ? card.color + " " + card.value
+                              : "Wild " + card.value
+                          }
+                          aria-label={
+                            card.color
+                              ? card.color + " " + card.value
+                              : "Wild " + card.value
+                          }
+                          className={
+                            "flip-card playable-card " +
+                            (card.color
+                              ? cardColors[card.color]
+                              : "card-wild") +
+                            (isMyTurn && room.status === "playing"
+                              ? " playable-card-enabled"
+                              : "")
+                          }
+                        >
+                          <span className="flip-card-corner">
+                            {card.value.toUpperCase()}
+                          </span>
+
+                          <span className="flip-card-value">
+                            {card.value.toUpperCase()}
+                          </span>
+
+                          <span className="flip-card-corner flip-card-corner-bottom">
+                            {card.value.toUpperCase()}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-2xl border border-white/15 bg-black/10 p-5 text-center text-sm text-white/70">
+                      No cards remaining.
+                    </p>
+                  )}
+
+                  <p className="mt-3 text-center text-xs text-white/65">
+                    Select a card to play it. Swipe horizontally on mobile to
+                    see your full hand.
                   </p>
                 </div>
 
                 {/* Game controls */}
-                <div className="mt-5 flex flex-col justify-center gap-3 sm:flex-row">
+                <div className="relative z-10 mt-6 flex flex-col justify-center gap-3 sm:flex-row">
                   <button
                     type="button"
                     onClick={drawCard}
                     disabled={!isMyTurn || room.status !== "playing"}
-                    className="min-h-12 rounded-xl bg-blue-700 px-6 py-3 font-bold hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/20 bg-white px-6 py-3 font-extrabold text-red-900 shadow-lg transition hover:bg-yellow-100 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    🃏 Draw Card
+                    <Layers size={18} aria-hidden="true" />
+                    Draw a card
                   </button>
 
                   <button
@@ -968,9 +1093,10 @@ export default function Home() {
                       !game.drawnCardId ||
                       room.status !== "playing"
                     }
-                    className="min-h-12 rounded-xl border border-slate-700 px-6 py-3 font-bold hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/25 bg-black/15 px-6 py-3 font-bold text-white transition hover:bg-black/25 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Pass Turn
+                    <ArrowLeft size={17} aria-hidden="true" />
+                    Pass turn
                   </button>
                 </div>
               </div>
@@ -982,10 +1108,19 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={leaveRoom}
-              className="mt-6 min-h-10 text-sm text-slate-400 hover:text-white"
+              onClick={() => {
+                const shouldLeave = window.confirm(
+                  "Are you sure you want to leave this room?",
+                );
+
+                if (shouldLeave) {
+                  leaveRoom();
+                }
+              }}
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-rose-200/50 bg-rose-950/20 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-rose-950/35"
             >
-              ← Leave room
+              <span aria-hidden="true">↗</span>
+              Leave Room
             </button>
           </div>
         )}
