@@ -3,7 +3,8 @@ import cors from "cors";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
-import { registerRoomHandlers } from "./sockets/roomHandlers.js";
+import { registerRoomHandlers, restorePersistedRooms, } from "./sockets/roomHandlers.js";
+import { connectDatabase } from "./config/database.js";
 dotenv.config();
 const app = express();
 const httpServer = createServer(app);
@@ -40,6 +41,17 @@ io.on("connection", (socket) => {
         console.log("Player disconnected:", socket.id);
     });
 });
-httpServer.listen(PORT, () => {
-    console.log(`🎮 ColorFlip server running on port ${PORT}`);
-});
+async function startServer() {
+    try {
+        await connectDatabase();
+        await restorePersistedRooms();
+        httpServer.listen(PORT, () => {
+            console.log("ColorFlip server running on port " + PORT);
+        });
+    }
+    catch (error) {
+        console.error("Failed to start ColorFlip server:", error);
+        process.exitCode = 1;
+    }
+}
+void startServer();

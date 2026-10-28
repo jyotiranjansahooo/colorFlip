@@ -1,6 +1,10 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Server, Socket } from "socket.io";
-
+import {
+  deleteRoom,
+  loadRooms,
+  saveRoom,
+} from "../services/roomPersistence.js";
 import type {
   ActionType,
   Card,
@@ -83,6 +87,41 @@ const ACTIONS: ActionType[] = ["skip", "reverse", "draw-two"];
 const rooms = new Map<string, Room>();
 const sessions = new Map<string, SocketSession>();
 const reconnectTokens = new Map<string, string>();
+
+export async function restorePersistedRooms(): Promise<void> {
+  const savedRooms = await loadRooms();
+
+  for (const savedRoom of savedRooms) {
+    const restoredRoom = {
+      roomId: savedRoom.roomId,
+      hostId: savedRoom.hostId,
+      status: savedRoom.status,
+      players: savedRoom.players.map((player) => ({
+        ...player,
+        connected: false,
+      })),
+      game: savedRoom.game
+        ? {
+            ...savedRoom.game,
+            players: savedRoom.game.players.map((player) => ({
+              ...player,
+              connected: false,
+            })),
+          }
+        : null,
+    };
+
+    rooms.set(restoredRoom.roomId, restoredRoom);
+
+    for (const [playerId, token] of Object.entries(savedRoom.reconnectTokens)) {
+      reconnectTokens.set(playerId, token);
+    }
+
+    await saveRoom(restoredRoom, reconnectTokens);
+  }
+
+  console.log("Restored " + savedRooms.length + " saved room(s) from MongoDB.");
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -464,6 +503,11 @@ function removePlayerFromRoom(io: Server, room: Room, playerId: string): void {
 
   if (room.players.length === 0) {
     rooms.delete(room.roomId);
+
+    void deleteRoom(room.roomId).catch((error: unknown) => {
+      console.error("Failed to delete empty room from MongoDB:", error);
+    });
+
     return;
   }
 
@@ -476,6 +520,10 @@ function removePlayerFromRoom(io: Server, room: Room, playerId: string): void {
   }
 
   emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after player removal:", error);
+  });
 }
 
 function validateGameSession(
@@ -728,6 +776,10 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
   } satisfies RoomCreatedPayload);
 
   emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save created room:", error);
+  });
 }
 
 function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
@@ -796,6 +848,10 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   } satisfies RoomJoinedPayload);
 
   emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after player joined:", error);
+  });
 }
 
 function handleStartRoom(socket: Socket, io: Server): void {
@@ -827,12 +883,17 @@ function handleStartRoom(socket: Socket, io: Server): void {
     room.game = createInitialGame(room);
     room.status = "playing";
     emitRoomState(io, room);
+
+    void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+      console.error("Failed to save room after game started:", error);
+    });
   } catch {
     room.game = null;
     room.status = "waiting";
     emitRoomError(socket, "Unable to start the game. Please try again.");
   }
 }
+
 function handlePlayCard(socket: Socket, payload: unknown, io: Server): void {
   if (
     !isRecord(payload) ||
@@ -867,6 +928,10 @@ function handlePlayCard(socket: Socket, payload: unknown, io: Server): void {
   }
 
   emitRoomState(io, sessionData.room);
+
+  void saveRoom(sessionData.room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after card played:", error);
+  });
 }
 
 function handleDrawCard(socket: Socket, io: Server): void {
@@ -884,6 +949,10 @@ function handleDrawCard(socket: Socket, io: Server): void {
   }
 
   emitRoomState(io, sessionData.room);
+
+  void saveRoom(sessionData.room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after card drawn:", error);
+  });
 }
 
 function handlePassTurn(socket: Socket, io: Server): void {
@@ -901,6 +970,10 @@ function handlePassTurn(socket: Socket, io: Server): void {
   }
 
   emitRoomState(io, sessionData.room);
+
+  void saveRoom(sessionData.room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after turn passed:", error);
+  });
 }
 
 function handleReconnect(socket: Socket, payload: unknown, io: Server): void {
@@ -958,6 +1031,10 @@ function handleReconnect(socket: Socket, payload: unknown, io: Server): void {
   });
 
   emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after player reconnected:", error);
+  });
 }
 
 function handleDisconnect(socket: Socket, io: Server): void {
@@ -994,6 +1071,10 @@ function handleDisconnect(socket: Socket, io: Server): void {
   }
 
   emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room after player disconnected:", error);
+  });
 }
 
 export function registerRoomHandlers(io: Server, socket: Socket): void {

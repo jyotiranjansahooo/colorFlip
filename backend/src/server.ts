@@ -3,7 +3,11 @@ import cors from "cors";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
 import dotenv from "dotenv";
-import { registerRoomHandlers } from "./sockets/roomHandlers.js";
+import {
+  registerRoomHandlers,
+  restorePersistedRooms,
+} from "./sockets/roomHandlers.js";
+import { connectDatabase } from "./config/database.js";
 
 dotenv.config();
 
@@ -11,7 +15,6 @@ const app = express();
 const httpServer = createServer(app);
 
 const PORT = Number(process.env.PORT) || 5000;
-
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
 app.use(
@@ -55,6 +58,18 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
-  console.log(`🎮 ColorFlip server running on port ${PORT}`);
-});
+async function startServer(): Promise<void> {
+  try {
+    await connectDatabase();
+    await restorePersistedRooms();
+
+    httpServer.listen(PORT, () => {
+      console.log("ColorFlip server running on port " + PORT);
+    });
+  } catch (error: unknown) {
+    console.error("Failed to start ColorFlip server:", error);
+    process.exitCode = 1;
+  }
+}
+
+void startServer();
