@@ -28,6 +28,7 @@ export async function restorePersistedRooms() {
                     })),
                 }
                 : null,
+            settings: savedRoom.settings,
         };
         rooms.set(restoredRoom.roomId, restoredRoom);
         for (const [playerId, token] of Object.entries(savedRoom.reconnectTokens)) {
@@ -55,6 +56,16 @@ function createRoomCode() {
         roomId = randomBytes(3).toString("hex").toUpperCase();
     } while (rooms.has(roomId));
     return roomId;
+}
+function createComputerPlayer(index) {
+    const names = ["Nova", "Blaze", "Pixel", "Bolt"];
+    return {
+        id: randomUUID(),
+        name: "CPU " + (names[index % names.length] ?? "Player"),
+        hand: [],
+        connected: true,
+        isComputer: true,
+    };
 }
 function createPlayer(name) {
     return {
@@ -98,6 +109,7 @@ function buildPublicState(room, playerId) {
         name: player.name,
         cardCount: player.hand.length,
         connected: player.connected,
+        isComputer: player.isComputer ?? false,
     }));
     let game = null;
     if (room.game) {
@@ -119,6 +131,7 @@ function buildPublicState(room, playerId) {
         status: room.status,
         players,
         game,
+        settings: { ...room.settings },
     };
 }
 function emitRoomState(io, room) {
@@ -241,6 +254,7 @@ function createInitialGame(room) {
         name: player.name,
         hand: [],
         connected: player.connected,
+        isComputer: player.isComputer ?? false,
     }));
     const drawPile = createDeck();
     for (let cardIndex = 0; cardIndex < STARTING_HAND_SIZE; cardIndex += 1) {
@@ -479,6 +493,115 @@ function passPlayerTurn(game, player) {
     advanceTurn(game);
     return null;
 }
+const processingComputerRooms = new Set();
+function chooseComputerColor(player) {
+    const counts = {
+        red: 0,
+        blue: 0,
+        green: 0,
+        yellow: 0,
+    };
+    for (const card of player.hand) {
+        if (card.color !== null) {
+            counts[card.color] += 1;
+        }
+    }
+    let bestColor = "red";
+    for (const color of COLORS) {
+        if (counts[color] > counts[bestColor]) {
+            bestColor = color;
+        }
+    }
+    return bestColor;
+}
+async function processComputerTurns(io, room) {
+    if (processingComputerRooms.has(room.roomId)) {
+        return;
+    }
+    processingComputerRooms.add(room.roomId);
+    try {
+        let turnsProcessed = 0;
+        while (turnsProcessed < 30) {
+            const game = room.game;
+            if (!game || room.status !== "playing") {
+                return;
+            }
+            if (game.status !== "playing") {
+                room.status = "finished";
+                emitRoomState(io, room);
+                return;
+            }
+            const currentPlayer = game.players[game.currentPlayerIndex];
+            if (!currentPlayer || !currentPlayer.isComputer) {
+                return;
+            }
+            turnsProcessed += 1;
+            await new Promise((resolve) => {
+                setTimeout(resolve, 650);
+            });
+            // Ensure the same game is still active after the delay.
+            if (room.game !== game || room.status !== "playing") {
+                return;
+            }
+            const player = game.players[game.currentPlayerIndex];
+            if (!player || !player.isComputer) {
+                return;
+            }
+            let actionError = null;
+            const playableCard = player.hand.find((card) => isPlayableCard(card, game, player));
+            if (playableCard) {
+                const chosenColor = playableCard.color === null ? chooseComputerColor(player) : undefined;
+                actionError = playCardForPlayer(game, player, playableCard.id, chosenColor);
+            }
+            else {
+                actionError = drawForPlayer(game, player);
+                if (!actionError) {
+                    const drawnCardId = game.drawnCardId;
+                    const drawnCard = player.hand.find((card) => card.id === drawnCardId);
+                    if (drawnCard && isPlayableCard(drawnCard, game, player)) {
+                        const chosenColor = drawnCard.color === null
+                            ? chooseComputerColor(player)
+                            : undefined;
+                        actionError = playCardForPlayer(game, player, drawnCard.id, chosenColor);
+                    }
+                    else {
+                        actionError = passPlayerTurn(game, player);
+                    }
+                }
+                else {
+                    // If no card can be drawn, advance the turn safely.
+                    advanceTurn(game);
+                    actionError = null;
+                }
+            }
+            if (actionError) {
+                console.error("Computer turn failed:", player.name, actionError);
+                // Prevent a stuck game if an unexpected validation error occurs.
+                if (game.status === "playing" &&
+                    game.players[game.currentPlayerIndex]?.id === player.id) {
+                    advanceTurn(game);
+                }
+            }
+            if (game.winnerId !== null) {
+                room.status = "finished";
+            }
+            emitRoomState(io, room);
+            try {
+                await saveRoom(room, reconnectTokens);
+            }
+            catch (error) {
+                console.error("Failed to save room after computer turn:", error);
+            }
+            if (room.status !== "playing" || game.status !== "playing") {
+                return;
+            }
+        }
+        console.warn("Computer turn limit reached for room:", room.roomId);
+    }
+    finally {
+        processingComputerRooms.delete(room.roomId);
+    }
+}
 function handleCreateRoom(socket, payload, io) {
     if (!isRecord(payload) || typeof payload.name !== "string") {
         emitRoomError(socket, "Invalid room creation details.");
@@ -499,19 +622,28 @@ function handleCreateRoom(socket, payload, io) {
         status: "waiting",
         players: [player],
         game: null,
+        settings: {
+            maxPlayers: 4,
+            opponentMode: "friends",
+        },
     };
     rooms.set(roomId, room);
     sessions.set(socket.id, {
         roomId,
         playerId: player.id,
     });
+    console.log("Creating room:", roomId);
     socket.emit("room:created", {
         roomId,
         playerId: player.id,
         reconnectToken,
     });
     emitRoomState(io, room);
-    void saveRoom(room, reconnectTokens).catch((error) => {
+    void saveRoom(room, reconnectTokens)
+        .then(() => {
+        console.log("Room saved to MongoDB:", roomId);
+    })
+        .catch((error) => {
         console.error("Failed to save created room:", error);
     });
 }
@@ -545,7 +677,7 @@ function handleJoinRoom(socket, payload, io) {
         emitRoomError(socket, "That nickname is already being used in this room.");
         return;
     }
-    if (room.players.length >= MAX_PLAYERS) {
+    if (room.players.length >= room.settings.maxPlayers) {
         emitRoomError(socket, "This room cannot accept more players.");
         return;
     }
@@ -567,6 +699,50 @@ function handleJoinRoom(socket, payload, io) {
         console.error("Failed to save room after player joined:", error);
     });
 }
+function handleUpdateRoomSettings(socket, payload, io) {
+    const sessionData = getSessionRoom(socket);
+    if (!sessionData) {
+        emitRoomError(socket, "Join a room first.");
+        return;
+    }
+    const { room, player } = sessionData;
+    if (player.id !== room.hostId) {
+        emitRoomError(socket, "Only the host can change room settings.");
+        return;
+    }
+    if (room.status !== "waiting") {
+        emitRoomError(socket, "Room settings cannot be changed after the game starts.");
+        return;
+    }
+    if (!isRecord(payload)) {
+        emitRoomError(socket, "Invalid room settings.");
+        return;
+    }
+    const maxPlayers = payload.maxPlayers;
+    const opponentMode = payload.opponentMode;
+    if (maxPlayers !== 2 && maxPlayers !== 3 && maxPlayers !== 4) {
+        emitRoomError(socket, "Choose 2, 3, or 4 players.");
+        return;
+    }
+    if (opponentMode !== "friends" &&
+        opponentMode !== "computers" &&
+        opponentMode !== "mixed") {
+        emitRoomError(socket, "Choose a valid opponent mode.");
+        return;
+    }
+    if (room.players.length > maxPlayers) {
+        emitRoomError(socket, "There are already too many human players for that limit.");
+        return;
+    }
+    room.settings = {
+        maxPlayers,
+        opponentMode,
+    };
+    emitRoomState(io, room);
+    void saveRoom(room, reconnectTokens).catch((error) => {
+        console.error("Failed to save room settings:", error);
+    });
+}
 function handleStartRoom(socket, io) {
     const sessionData = getSessionRoom(socket);
     if (!sessionData) {
@@ -578,25 +754,52 @@ function handleStartRoom(socket, io) {
         emitRoomError(socket, "Only the room host can start the game.");
         return;
     }
-    if (room.players.length < MIN_PLAYERS || room.players.length > MAX_PLAYERS) {
-        emitRoomError(socket, "The game requires 2–4 players.");
-        return;
-    }
     if (room.status !== "waiting") {
         emitRoomError(socket, "The game has already started.");
         return;
     }
+    const maxPlayers = room.settings.maxPlayers;
+    const opponentMode = room.settings.opponentMode;
+    const humanPlayers = room.players.filter((roomPlayer) => !roomPlayer.isComputer);
+    if (humanPlayers.length > maxPlayers) {
+        emitRoomError(socket, "The room has more players than the selected limit.");
+        return;
+    }
+    if (opponentMode === "friends" && humanPlayers.length < 2) {
+        emitRoomError(socket, "Invite at least one friend before starting a friends-only game.");
+        return;
+    }
+    if (humanPlayers.length < 1) {
+        emitRoomError(socket, "At least one human player is required.");
+        return;
+    }
+    const originalPlayers = [...room.players];
     try {
+        if (opponentMode === "computers" || opponentMode === "mixed") {
+            const emptySeats = maxPlayers - humanPlayers.length;
+            for (let index = 0; index < emptySeats; index += 1) {
+                room.players.push(createComputerPlayer(index));
+            }
+        }
+        if (room.players.length < 2) {
+            room.players = originalPlayers;
+            emitRoomError(socket, "The game requires at least two players.");
+            return;
+        }
         room.game = createInitialGame(room);
         room.status = "playing";
         emitRoomState(io, room);
         void saveRoom(room, reconnectTokens).catch((error) => {
             console.error("Failed to save room after game started:", error);
         });
+        // If the first player is a computer, start its turn automatically.
+        void processComputerTurns(io, room);
     }
-    catch {
+    catch (error) {
+        room.players = originalPlayers;
         room.game = null;
         room.status = "waiting";
+        console.error("Failed to start game:", error);
         emitRoomError(socket, "Unable to start the game. Please try again.");
     }
 }
@@ -624,6 +827,7 @@ function handlePlayCard(socket, payload, io) {
     void saveRoom(sessionData.room, reconnectTokens).catch((error) => {
         console.error("Failed to save room after card played:", error);
     });
+    void processComputerTurns(io, sessionData.room);
 }
 function handleDrawCard(socket, io) {
     const sessionData = validateGameSession(socket);
@@ -745,5 +949,8 @@ export function registerRoomHandlers(io, socket) {
     });
     socket.on("disconnect", () => {
         handleDisconnect(socket, io);
+    });
+    socket.on("room:settings:update", (payload) => {
+        handleUpdateRoomSettings(socket, payload, io);
     });
 }

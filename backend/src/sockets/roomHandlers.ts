@@ -13,17 +13,29 @@ import type {
   GameState,
   Player,
 } from "../game/types.js";
-
+type OpponentMode = "friends" | "computers" | "mixed";
 type RoomStatus = "waiting" | "playing" | "finished";
 
+interface RoomSettings {
+  maxPlayers: 2 | 3 | 4;
+  opponentMode: OpponentMode;
+}
+interface RoomSettings {
+  maxPlayers: 2 | 3 | 4;
+  opponentMode: OpponentMode;
+}
 interface Room {
   roomId: string;
   hostId: string;
   status: RoomStatus;
   players: Player[];
   game: GameState | null;
+  settings: RoomSettings;
 }
-
+interface RoomSettingsPayload {
+  maxPlayers: 2 | 3 | 4;
+  opponentMode: OpponentMode;
+}
 interface RoomCreatePayload {
   name: string;
 }
@@ -50,6 +62,7 @@ interface PublicPlayer {
   name: string;
   cardCount: number;
   connected: boolean;
+  isComputer: boolean;
 }
 
 interface PublicGameState {
@@ -69,6 +82,7 @@ interface PublicRoomState {
   status: RoomStatus;
   players: PublicPlayer[];
   game: PublicGameState | null;
+  settings: RoomSettings;
 }
 
 interface SocketSession {
@@ -109,6 +123,7 @@ export async function restorePersistedRooms(): Promise<void> {
             })),
           }
         : null,
+      settings: savedRoom.settings,
     };
 
     rooms.set(restoredRoom.roomId, restoredRoom);
@@ -148,7 +163,17 @@ function createRoomCode(): string {
 
   return roomId;
 }
+function createComputerPlayer(index: number): Player {
+  const names = ["Nova", "Blaze", "Pixel", "Bolt"];
 
+  return {
+    id: randomUUID(),
+    name: "CPU " + (names[index % names.length] ?? "Player"),
+    hand: [],
+    connected: true,
+    isComputer: true,
+  };
+}
 function createPlayer(name: string): Player {
   return {
     id: randomUUID(),
@@ -208,6 +233,7 @@ function buildPublicState(room: Room, playerId: string): PublicRoomState {
     name: player.name,
     cardCount: player.hand.length,
     connected: player.connected,
+    isComputer: player.isComputer ?? false,
   }));
 
   let game: PublicGameState | null = null;
@@ -235,6 +261,7 @@ function buildPublicState(room: Room, playerId: string): PublicRoomState {
     status: room.status,
     players,
     game,
+    settings: { ...room.settings },
   };
 }
 
@@ -403,6 +430,7 @@ function createInitialGame(room: Room): GameState {
     name: player.name,
     hand: [],
     connected: player.connected,
+    isComputer: player.isComputer ?? false,
   }));
 
   const drawPile = createDeck();
@@ -733,6 +761,159 @@ function passPlayerTurn(game: GameState, player: Player): string | null {
   advanceTurn(game);
   return null;
 }
+const processingComputerRooms = new Set<string>();
+
+function chooseComputerColor(player: Player): CardColor {
+  const counts: Record<CardColor, number> = {
+    red: 0,
+    blue: 0,
+    green: 0,
+    yellow: 0,
+  };
+
+  for (const card of player.hand) {
+    if (card.color !== null) {
+      counts[card.color] += 1;
+    }
+  }
+
+  let bestColor: CardColor = "red";
+
+  for (const color of COLORS) {
+    if (counts[color] > counts[bestColor]) {
+      bestColor = color;
+    }
+  }
+
+  return bestColor;
+}
+
+async function processComputerTurns(io: Server, room: Room): Promise<void> {
+  if (processingComputerRooms.has(room.roomId)) {
+    return;
+  }
+
+  processingComputerRooms.add(room.roomId);
+
+  try {
+    let turnsProcessed = 0;
+
+    while (turnsProcessed < 30) {
+      const game = room.game;
+
+      if (!game || room.status !== "playing") {
+        return;
+      }
+
+      if (game.status !== "playing") {
+        room.status = "finished";
+        emitRoomState(io, room);
+        return;
+      }
+
+      const currentPlayer = game.players[game.currentPlayerIndex];
+
+      if (!currentPlayer || !currentPlayer.isComputer) {
+        return;
+      }
+
+      turnsProcessed += 1;
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 650);
+      });
+
+      // Ensure the same game is still active after the delay.
+      if (room.game !== game || room.status !== "playing") {
+        return;
+      }
+
+      const player = game.players[game.currentPlayerIndex];
+
+      if (!player || !player.isComputer) {
+        return;
+      }
+
+      let actionError: string | null = null;
+
+      const playableCard = player.hand.find((card) =>
+        isPlayableCard(card, game, player),
+      );
+
+      if (playableCard) {
+        const chosenColor =
+          playableCard.color === null ? chooseComputerColor(player) : undefined;
+
+        actionError = playCardForPlayer(
+          game,
+          player,
+          playableCard.id,
+          chosenColor,
+        );
+      } else {
+        actionError = drawForPlayer(game, player);
+
+        if (!actionError) {
+          const drawnCardId = game.drawnCardId;
+
+          const drawnCard = player.hand.find((card) => card.id === drawnCardId);
+
+          if (drawnCard && isPlayableCard(drawnCard, game, player)) {
+            const chosenColor =
+              drawnCard.color === null
+                ? chooseComputerColor(player)
+                : undefined;
+
+            actionError = playCardForPlayer(
+              game,
+              player,
+              drawnCard.id,
+              chosenColor,
+            );
+          } else {
+            actionError = passPlayerTurn(game, player);
+          }
+        } else {
+          // If no card can be drawn, advance the turn safely.
+          advanceTurn(game);
+          actionError = null;
+        }
+      }
+
+      if (actionError) {
+        console.error("Computer turn failed:", player.name, actionError);
+
+        // Prevent a stuck game if an unexpected validation error occurs.
+        if (
+          game.status === "playing" &&
+          game.players[game.currentPlayerIndex]?.id === player.id
+        ) {
+          advanceTurn(game);
+        }
+      }
+
+      if (game.winnerId !== null) {
+        room.status = "finished";
+      }
+
+      emitRoomState(io, room);
+
+      try {
+        await saveRoom(room, reconnectTokens);
+      } catch (error: unknown) {
+        console.error("Failed to save room after computer turn:", error);
+      }
+
+      if (room.status !== "playing" || game.status !== "playing") {
+        return;
+      }
+    }
+
+    console.warn("Computer turn limit reached for room:", room.roomId);
+  } finally {
+    processingComputerRooms.delete(room.roomId);
+  }
+}
 
 function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
   if (!isRecord(payload) || typeof payload.name !== "string") {
@@ -761,6 +942,10 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
     status: "waiting",
     players: [player],
     game: null,
+    settings: {
+      maxPlayers: 4,
+      opponentMode: "friends",
+    },
   };
 
   rooms.set(roomId, room);
@@ -768,7 +953,7 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
     roomId,
     playerId: player.id,
   });
-
+  console.log("Creating room:", roomId);
   socket.emit("room:created", {
     roomId,
     playerId: player.id,
@@ -777,9 +962,13 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
 
   emitRoomState(io, room);
 
-  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
-    console.error("Failed to save created room:", error);
-  });
+  void saveRoom(room, reconnectTokens)
+    .then(() => {
+      console.log("Room saved to MongoDB:", roomId);
+    })
+    .catch((error: unknown) => {
+      console.error("Failed to save created room:", error);
+    });
 }
 
 function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
@@ -825,7 +1014,7 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
     return;
   }
 
-  if (room.players.length >= MAX_PLAYERS) {
+  if (room.players.length >= room.settings.maxPlayers) {
     emitRoomError(socket, "This room cannot accept more players.");
     return;
   }
@@ -853,7 +1042,74 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
     console.error("Failed to save room after player joined:", error);
   });
 }
+function handleUpdateRoomSettings(
+  socket: Socket,
+  payload: unknown,
+  io: Server,
+): void {
+  const sessionData = getSessionRoom(socket);
 
+  if (!sessionData) {
+    emitRoomError(socket, "Join a room first.");
+    return;
+  }
+
+  const { room, player } = sessionData;
+
+  if (player.id !== room.hostId) {
+    emitRoomError(socket, "Only the host can change room settings.");
+    return;
+  }
+
+  if (room.status !== "waiting") {
+    emitRoomError(
+      socket,
+      "Room settings cannot be changed after the game starts.",
+    );
+    return;
+  }
+
+  if (!isRecord(payload)) {
+    emitRoomError(socket, "Invalid room settings.");
+    return;
+  }
+
+  const maxPlayers = payload.maxPlayers;
+  const opponentMode = payload.opponentMode;
+
+  if (maxPlayers !== 2 && maxPlayers !== 3 && maxPlayers !== 4) {
+    emitRoomError(socket, "Choose 2, 3, or 4 players.");
+    return;
+  }
+
+  if (
+    opponentMode !== "friends" &&
+    opponentMode !== "computers" &&
+    opponentMode !== "mixed"
+  ) {
+    emitRoomError(socket, "Choose a valid opponent mode.");
+    return;
+  }
+
+  if (room.players.length > maxPlayers) {
+    emitRoomError(
+      socket,
+      "There are already too many human players for that limit.",
+    );
+    return;
+  }
+
+  room.settings = {
+    maxPlayers,
+    opponentMode,
+  };
+
+  emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save room settings:", error);
+  });
+}
 function handleStartRoom(socket: Socket, io: Server): void {
   const sessionData = getSessionRoom(socket);
 
@@ -869,27 +1125,72 @@ function handleStartRoom(socket: Socket, io: Server): void {
     return;
   }
 
-  if (room.players.length < MIN_PLAYERS || room.players.length > MAX_PLAYERS) {
-    emitRoomError(socket, "The game requires 2–4 players.");
-    return;
-  }
-
   if (room.status !== "waiting") {
     emitRoomError(socket, "The game has already started.");
     return;
   }
 
+  const maxPlayers = room.settings.maxPlayers;
+  const opponentMode = room.settings.opponentMode;
+
+  const humanPlayers = room.players.filter(
+    (roomPlayer) => !roomPlayer.isComputer,
+  );
+
+  if (humanPlayers.length > maxPlayers) {
+    emitRoomError(socket, "The room has more players than the selected limit.");
+    return;
+  }
+
+  if (opponentMode === "friends" && humanPlayers.length < 2) {
+    emitRoomError(
+      socket,
+      "Invite at least one friend before starting a friends-only game.",
+    );
+    return;
+  }
+
+  if (humanPlayers.length < 1) {
+    emitRoomError(socket, "At least one human player is required.");
+    return;
+  }
+
+  const originalPlayers = [...room.players];
+
   try {
+    if (opponentMode === "computers" || opponentMode === "mixed") {
+      const emptySeats = maxPlayers - humanPlayers.length;
+
+      for (let index = 0; index < emptySeats; index += 1) {
+        room.players.push(createComputerPlayer(index));
+      }
+    }
+
+    if (room.players.length < 2) {
+      room.players = originalPlayers;
+
+      emitRoomError(socket, "The game requires at least two players.");
+      return;
+    }
+
     room.game = createInitialGame(room);
     room.status = "playing";
+
     emitRoomState(io, room);
 
     void saveRoom(room, reconnectTokens).catch((error: unknown) => {
       console.error("Failed to save room after game started:", error);
     });
-  } catch {
+
+    // If the first player is a computer, start its turn automatically.
+    void processComputerTurns(io, room);
+  } catch (error: unknown) {
+    room.players = originalPlayers;
     room.game = null;
     room.status = "waiting";
+
+    console.error("Failed to start game:", error);
+
     emitRoomError(socket, "Unable to start the game. Please try again.");
   }
 }
@@ -932,6 +1233,8 @@ function handlePlayCard(socket: Socket, payload: unknown, io: Server): void {
   void saveRoom(sessionData.room, reconnectTokens).catch((error: unknown) => {
     console.error("Failed to save room after card played:", error);
   });
+
+  void processComputerTurns(io, sessionData.room);
 }
 
 function handleDrawCard(socket: Socket, io: Server): void {
@@ -1108,5 +1411,8 @@ export function registerRoomHandlers(io: Server, socket: Socket): void {
 
   socket.on("disconnect", () => {
     handleDisconnect(socket, io);
+  });
+  socket.on("room:settings:update", (payload: unknown) => {
+    handleUpdateRoomSettings(socket, payload, io);
   });
 }

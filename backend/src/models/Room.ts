@@ -6,6 +6,10 @@ interface StoredRoom {
   status: "waiting" | "playing" | "finished";
   players: Schema.Types.Mixed[];
   game: Schema.Types.Mixed | null;
+  settings: {
+    maxPlayers: 2 | 3 | 4;
+    opponentMode: "friends" | "computers" | "mixed";
+  };
   reconnectTokens: Map<string, string>;
   createdAt?: Date;
   updatedAt?: Date;
@@ -37,6 +41,20 @@ const roomSchema = new Schema<StoredRoom>(
       type: Schema.Types.Mixed,
       default: null,
     },
+    settings: {
+      maxPlayers: {
+        type: Number,
+        enum: [2, 3, 4],
+        default: 4,
+        required: true,
+      },
+      opponentMode: {
+        type: String,
+        enum: ["friends", "computers", "mixed"],
+        default: "friends",
+        required: true,
+      },
+    },
     reconnectTokens: {
       type: Map,
       of: String,
@@ -51,9 +69,7 @@ const roomSchema = new Schema<StoredRoom>(
 
 roomSchema.index({ updatedAt: 1 });
 
-const existingRoomModel = mongoose.models.Room as
-  | Model<StoredRoom>
-  | undefined;
+const existingRoomModel = mongoose.models.Room as Model<StoredRoom> | undefined;
 
 const RoomModel =
   existingRoomModel ?? mongoose.model<StoredRoom>("Room", roomSchema);

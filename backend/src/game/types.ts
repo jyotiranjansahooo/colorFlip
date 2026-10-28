@@ -3,8 +3,16 @@ export type CardColor = "red" | "blue" | "green" | "yellow";
 export type ActionType = "skip" | "reverse" | "draw-two";
 
 export type CardValue =
-  | "0" | "1" | "2" | "3" | "4"
-  | "5" | "6" | "7" | "8" | "9"
+  | "0"
+  | "1"
+  | "2"
+  | "3"
+  | "4"
+  | "5"
+  | "6"
+  | "7"
+  | "8"
+  | "9"
   | ActionType
   | "wild"
   | "wild-draw-four";
@@ -20,6 +28,7 @@ export interface Player {
   name: string;
   hand: Card[];
   connected: boolean;
+  isComputer?: boolean;
 }
 
 export interface GameState {

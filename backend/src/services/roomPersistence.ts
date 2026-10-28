@@ -3,12 +3,25 @@ import type { Card, GameState, Player } from "../game/types.js";
 
 export type PersistedRoomStatus = "waiting" | "playing" | "finished";
 
+export type OpponentMode = "friends" | "computers" | "mixed";
+
+export interface PersistedRoomSettings {
+  maxPlayers: 2 | 3 | 4;
+  opponentMode: OpponentMode;
+}
+
+const DEFAULT_ROOM_SETTINGS: PersistedRoomSettings = {
+  maxPlayers: 4,
+  opponentMode: "friends",
+};
+
 export interface RoomSnapshot {
   roomId: string;
   hostId: string;
   status: PersistedRoomStatus;
   players: Player[];
   game: GameState | null;
+  settings: PersistedRoomSettings;
 }
 
 export interface StoredRoomSnapshot extends RoomSnapshot {
@@ -27,6 +40,7 @@ function isCard(value: unknown): value is Card {
   }
 
   const validColors = ["red", "blue", "green", "yellow", null];
+
   const validValues = [
     "0",
     "1",
@@ -94,6 +108,29 @@ function isRoomStatus(value: unknown): value is PersistedRoomStatus {
   return value === "waiting" || value === "playing" || value === "finished";
 }
 
+function normalizeRoomSettings(value: unknown): PersistedRoomSettings {
+  if (!isRecord(value)) {
+    return { ...DEFAULT_ROOM_SETTINGS };
+  }
+
+  const maxPlayers =
+    value.maxPlayers === 2 || value.maxPlayers === 3 || value.maxPlayers === 4
+      ? value.maxPlayers
+      : DEFAULT_ROOM_SETTINGS.maxPlayers;
+
+  const opponentMode =
+    value.opponentMode === "friends" ||
+    value.opponentMode === "computers" ||
+    value.opponentMode === "mixed"
+      ? value.opponentMode
+      : DEFAULT_ROOM_SETTINGS.opponentMode;
+
+  return {
+    maxPlayers,
+    opponentMode,
+  };
+}
+
 function normalizeReconnectTokens(value: unknown): Record<string, string> {
   const tokens: Record<string, string> = {};
 
@@ -122,14 +159,14 @@ export async function saveRoom(
   room: RoomSnapshot,
   reconnectTokens: ReadonlyMap<string, string>,
 ): Promise<void> {
-const tokens: Record<string, string> = {};
-const roomPlayerIds = new Set(room.players.map((player) => player.id));
+  const tokens: Record<string, string> = {};
+  const roomPlayerIds = new Set(room.players.map((player) => player.id));
 
-for (const [playerId, token] of reconnectTokens.entries()) {
-  if (roomPlayerIds.has(playerId)) {
-    tokens[playerId] = token;
+  for (const [playerId, token] of reconnectTokens.entries()) {
+    if (roomPlayerIds.has(playerId)) {
+      tokens[playerId] = token;
+    }
   }
-}
 
   await RoomModel.updateOne(
     { roomId: room.roomId },
@@ -139,6 +176,7 @@ for (const [playerId, token] of reconnectTokens.entries()) {
         status: room.status,
         players: room.players,
         game: room.game,
+        settings: room.settings,
         reconnectTokens: tokens,
       },
     },
@@ -146,7 +184,7 @@ for (const [playerId, token] of reconnectTokens.entries()) {
       upsert: true,
       runValidators: true,
     },
-  );
+  ).exec();
 }
 
 export async function loadRooms(): Promise<StoredRoomSnapshot[]> {
@@ -188,6 +226,7 @@ export async function loadRooms(): Promise<StoredRoomSnapshot[]> {
       status: data.status,
       players: data.players,
       game,
+      settings: normalizeRoomSettings(data.settings),
       reconnectTokens: normalizeReconnectTokens(data.reconnectTokens),
       ...(data.createdAt instanceof Date ? { createdAt: data.createdAt } : {}),
       ...(data.updatedAt instanceof Date ? { updatedAt: data.updatedAt } : {}),
