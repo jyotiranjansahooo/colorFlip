@@ -228,13 +228,19 @@ function findSocketId(room: Room, playerId: string): string | undefined {
 }
 
 function buildPublicState(room: Room, playerId: string): PublicRoomState {
-  const players: PublicPlayer[] = room.players.map((player) => ({
-    id: player.id,
-    name: player.name,
-    cardCount: player.hand.length,
-    connected: player.connected,
-    isComputer: player.isComputer ?? false,
-  }));
+  const players: PublicPlayer[] = room.players.map((player) => {
+    const gamePlayer = room.game?.players.find(
+      (candidate) => candidate.id === player.id,
+    );
+
+    return {
+      id: player.id,
+      name: player.name,
+      cardCount: gamePlayer?.hand.length ?? player.hand.length,
+      connected: player.connected,
+      isComputer: player.isComputer ?? false,
+    };
+  });
 
   let game: PublicGameState | null = null;
 
