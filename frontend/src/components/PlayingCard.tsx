@@ -8,12 +8,18 @@ interface PlayingCardProps {
 }
 
 function getCardColor(color: GameCard["color"]): string {
-  if (color === "red") return "#ED1C2E";
-  if (color === "blue") return "#0878B9";
-  if (color === "green") return "#35AD50";
-  if (color === "yellow") return "#FFD928";
-
-  return "#171717";
+  switch (color) {
+    case "red":
+      return "#ED1C2E";
+    case "blue":
+      return "#0878F9";
+    case "green":
+      return "#35AD50";
+    case "yellow":
+      return "#FFD928";
+    default:
+      return "#171717";
+  }
 }
 
 function getCardLabel(value: string): string {
@@ -22,6 +28,7 @@ function getCardLabel(value: string): string {
   if (normalized === "skip") return "⊘";
   if (normalized === "reverse") return "⇄";
   if (normalized === "draw2" || normalized === "+2") return "+2";
+
   if (
     normalized === "draw4" ||
     normalized === "+4" ||
@@ -30,6 +37,7 @@ function getCardLabel(value: string): string {
   ) {
     return "+4";
   }
+
   if (normalized === "wild") return "WILD";
 
   return value;
@@ -56,9 +64,9 @@ export default function PlayingCard({
   const value = String(card.value);
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
   const label = getCardLabel(value);
-  const background = getCardColor(card.color);
   const isWild = isWildCard(value);
   const isNumber = /^[0-9]+$/.test(value);
+
   const isDrawFour =
     normalized === "draw4" ||
     normalized === "+4" ||
@@ -67,20 +75,25 @@ export default function PlayingCard({
 
   const cornerLabel = isDrawFour ? "+4" : label;
 
+  const background = isWild
+    ? "linear-gradient(135deg, #ED1C2E 0%, #ED1C2E 25%, #0878F9 25%, #0878F9 50%, #35AD50 50%, #35AD50 75%, #FFD928 75%, #FFD928 100%)"
+    : getCardColor(card.color);
+
   return (
     <button
+      data-playing-card
       type="button"
       onClick={() => onPlay(card)}
       disabled={disabled}
       title={value}
-      aria-label={
-        (card.color ? card.color + " " : "Wild ") + value
-      }
+      aria-label={(card.color ? card.color + " " : "Wild ") + value}
       className={
         "relative flex h-28 w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-[11px] border-[3px] border-white p-[2px] shadow-lg transition duration-200 hover:z-50 hover:-translate-y-3 hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 sm:h-32 sm:w-[5.25rem] " +
         colorClass
       }
-      style={{ backgroundColor: background }}
+      style={{
+        background: background,
+      }}
     >
       <span className="absolute inset-[3px] rounded-[7px] border border-white/90" />
 
@@ -127,12 +140,10 @@ export default function PlayingCard({
           <span
             className={
               "relative z-10 flex max-w-full items-center justify-center px-1 text-center font-black leading-none " +
-              (isNumber
-                ? "text-4xl sm:text-5xl"
-                : "text-2xl sm:text-3xl")
+              (isNumber ? "text-4xl sm:text-5xl" : "text-2xl sm:text-3xl")
             }
             style={{
-              color: background,
+              color: getCardColor(card.color),
               WebkitTextStroke: "0.5px white",
               textShadow: "1px 1px 0 white",
             }}

@@ -1135,7 +1135,17 @@ function handleStartRoom(socket: Socket, io: Server): void {
     emitRoomError(socket, "The game has already started.");
     return;
   }
+  const disconnectedPlayers = room.players.filter(
+    (roomPlayer) => !roomPlayer.isComputer && !roomPlayer.connected,
+  );
 
+  if (disconnectedPlayers.length > 0) {
+    emitRoomError(
+      socket,
+      "Cannot start the game. All players must be connected. Remove disconnected players or ask them to reconnect.",
+    );
+    return;
+  }
   const maxPlayers = room.settings.maxPlayers;
   const opponentMode = room.settings.opponentMode;
 
@@ -1314,10 +1324,19 @@ function handleReconnect(socket: Socket, payload: unknown, io: Server): void {
     return;
   }
 
-  if (player.connected) {
-    emitRoomError(socket, "This player is already connected.");
-    return;
+  const existingSocketId = findSocketId(room, player.id);
+
+  if (existingSocketId && existingSocketId !== socket.id) {
+    sessions.delete(existingSocketId);
+
+    const existingSocket = io.sockets.sockets.get(existingSocketId);
+
+    if (existingSocket?.connected) {
+      existingSocket.disconnect(true);
+    }
   }
+
+  player.connected = false;
 
   sessions.set(socket.id, {
     roomId: room.roomId,
@@ -1385,12 +1404,64 @@ function handleDisconnect(socket: Socket, io: Server): void {
     console.error("Failed to save room after player disconnected:", error);
   });
 }
+function handleKickPlayer(socket: Socket, payload: unknown, io: Server): void {
+  const sessionData = getSessionRoom(socket);
 
+  if (!sessionData) {
+    emitRoomError(socket, "Join a room first.");
+    return;
+  }
+
+  const { room, player } = sessionData;
+
+  if (player.id !== room.hostId) {
+    emitRoomError(socket, "Only the host can kick players.");
+    return;
+  }
+
+  if (!isRecord(payload) || typeof payload.playerId !== "string") {
+    emitRoomError(socket, "Invalid player selection.");
+    return;
+  }
+
+  const target = room.players.find(
+    (candidate) => candidate.id === payload.playerId,
+  );
+
+  if (!target) {
+    emitRoomError(socket, "Player not found.");
+    return;
+  }
+
+  if (target.id === room.hostId) {
+    emitRoomError(socket, "The host cannot kick themselves.");
+    return;
+  }
+
+  if (target.connected) {
+    emitRoomError(socket, "You can only kick disconnected players.");
+    return;
+  }
+
+  const targetSocketId = findSocketId(room, target.id);
+
+  if (targetSocketId) {
+    sessions.delete(targetSocketId);
+    io.to(targetSocketId).emit("room:kicked", {
+      message: "The host removed you from the room.",
+    });
+    io.sockets.sockets.get(targetSocketId)?.disconnect(true);
+  }
+
+  removePlayerFromRoom(io, room, target.id);
+}
 export function registerRoomHandlers(io: Server, socket: Socket): void {
   socket.on("room:reconnect", (payload: unknown) => {
     handleReconnect(socket, payload, io);
   });
-
+  socket.on("room:player:kick", (payload: unknown) => {
+    handleKickPlayer(socket, payload, io);
+  });
   socket.on("room:create", (payload: unknown) => {
     handleCreateRoom(socket, payload, io);
   });

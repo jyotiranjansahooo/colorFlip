@@ -80,6 +80,13 @@ const guestNouns = [
   "meteor",
 ];
 
+function saveReconnectCredentials(payload: {
+  roomId: string;
+  playerId: string;
+  reconnectToken: string;
+}): void {
+  localStorage.setItem(RECONNECT_STORAGE_KEY, JSON.stringify(payload));
+}
 function makeGuestName(): string {
   const adjective =
     guestAdjectives[Math.floor(Math.random() * guestAdjectives.length)];
@@ -409,13 +416,19 @@ function WildColorDialog({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Page                                                                */
-/* ------------------------------------------------------------------ */
-
 export default function Home() {
   const [name, setName] = useState("");
-  const [roomCode, setRoomCode] = useState("");
+  const [roomCode, setRoomCode] = useState(() => {
+    if (typeof window === "undefined") return "";
+
+    const invitedRoom = new URLSearchParams(window.location.search).get("room");
+
+    return (invitedRoom ?? "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
+  });
+  const autoJoinAttempted = useRef(false);
   const [playerId, setPlayerId] = useState("");
   const [room, setRoom] = useState<RoomState | null>(null);
   const [isReconnecting, setIsReconnecting] = useState(false);
@@ -540,7 +553,6 @@ export default function Home() {
           : (payload.message ?? payload.error ?? "Something went wrong.");
 
       if (reconnectingRef.current) {
-        localStorage.removeItem(RECONNECT_STORAGE_KEY);
         reconnectingRef.current = false;
         setIsReconnecting(false);
         setNotice("");
@@ -575,6 +587,54 @@ export default function Home() {
       socket.off("room:state", handleRoomState);
       socket.off("room:error", handleRoomError);
       socket.off("connect_error", handleConnectError);
+    };
+  }, []);
+
+  // Automatically join the room when a player opens an invitation link.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const invitedRoom = (params.get("room") ?? "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "")
+        .slice(0, 6);
+
+      if (!invitedRoom || autoJoinAttempted.current) {
+        return;
+      }
+
+      autoJoinAttempted.current = true;
+
+      localStorage.removeItem(RECONNECT_STORAGE_KEY);
+      reconnectingRef.current = false;
+      setIsReconnecting(false);
+
+      const guestName = makeGuestName();
+      setName(guestName);
+      setRoomCode(invitedRoom);
+      setError("");
+      setNotice("Joining your friend's room...");
+
+      const joinInvitedRoom = () => {
+        setIsConnecting(false);
+        socket.emit("room:join", {
+          roomId: invitedRoom,
+          name: guestName,
+        });
+      };
+
+      if (socket.connected) {
+        joinInvitedRoom();
+        return;
+      }
+
+      setIsConnecting(true);
+      socket.once("connect", joinInvitedRoom);
+      socket.connect();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timer);
     };
   }, []);
 
@@ -742,6 +802,68 @@ export default function Home() {
     } catch {
       setNotice("Your room code is " + room.roomId + ". Copy it manually.");
     }
+  }
+
+  function getInviteLink(): string {
+    if (!room) return window.location.origin;
+
+    const inviteUrl = new URL(window.location.origin);
+    inviteUrl.searchParams.set("room", room.roomId);
+    return inviteUrl.toString();
+  }
+
+  function getInviteMessage(): string {
+    if (!room) return "Join me on ColorFlip!";
+
+    return (
+      "🎮 Join my ColorFlip game!\n\n" +
+      "🔑 Room Code: " +
+      room.roomId +
+      "\n\n🔗 Join here: " +
+      getInviteLink()
+    );
+  }
+
+  async function shareRoom(): Promise<void> {
+    if (!room) return;
+
+    const inviteLink = getInviteLink();
+    const inviteMessage = getInviteMessage();
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Join my ColorFlip game",
+          text: inviteMessage,
+          url: inviteLink,
+        });
+      } else {
+        await navigator.clipboard.writeText(inviteMessage);
+        setNotice("Invite copied! Share it with your friends.");
+      }
+    } catch (shareError: unknown) {
+      if (shareError instanceof Error && shareError.name !== "AbortError") {
+        try {
+          await navigator.clipboard.writeText(inviteMessage);
+          setNotice("Invite copied! Share it with your friends.");
+        } catch {
+          setError(
+            "Unable to share or copy the invite. Please copy the room code.",
+          );
+        }
+      }
+    }
+  }
+
+  function shareOnWhatsApp(): void {
+    if (!room) return;
+
+    const message = encodeURIComponent(getInviteMessage());
+    window.open(
+      "https://wa.me/?text=" + message,
+      "_blank",
+      "noopener,noreferrer",
+    );
   }
 
   const isHost = Boolean(room && playerId && room.hostId === playerId);
@@ -1149,6 +1271,24 @@ export default function Home() {
             <p className="mt-5 text-sm text-white/80 sm:text-base">
               Congratulations on winning UNO!
             </p>
+
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={leaveRoom}
+                className="min-h-12 w-full rounded-xl bg-yellow-300 px-5 py-3 font-bold text-red-950 transition hover:bg-yellow-200"
+              >
+                🏠 Back to Home
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="min-h-12 w-full rounded-xl border border-yellow-300/60 px-5 py-3 font-bold text-white transition hover:bg-white/10"
+              >
+                🔄 Play Again
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1396,13 +1536,34 @@ export default function Home() {
                 </h1>
               </div>
 
-              <button
-                type="button"
-                onClick={copyRoomCode}
-                className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
-              >
-                📋 Copy Room Code
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={copyRoomCode}
+                  className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
+                >
+                  📋 Copy Room Code
+                </button>
+
+                {isHost && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={shareRoom}
+                      className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
+                    >
+                      🔗 Share Invite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareOnWhatsApp}
+                      className="min-h-11 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
+                    >
+                      WhatsApp
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
 
             {notice && (
@@ -1506,23 +1667,41 @@ export default function Home() {
                   {room.players.map((player) => (
                     <div
                       key={player.id}
-                      data-player-tile
-                      data-player-id={player.id}
-                      className="flex items-center gap-4 rounded-2xl border border-red-100/20 bg-[#8C2322]/70 p-4 shadow-sm"
+                      className="flex items-center justify-between rounded-xl border border-white/10 p-4"
                     >
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#F5C56B]/15 text-xs font-black tracking-wide text-[#FFE0A0]">
-                        {player.id === room.hostId ? "HOST" : "PLAYER"}{" "}
-                      </div>
+                      <div>
+                        <p className="font-semibold text-white">
+                          {player.name}
+                          {player.id === room.hostId && (
+                            <span className="ml-2 text-yellow-300">(Host)</span>
+                          )}
+                          {player.id === playerId && (
+                            <span className="ml-2 text-emerald-300">(You)</span>
+                          )}
+                        </p>
 
-                      <div className="min-w-0">
-                        {/* <p className="truncate font-semibold">{player.name}</p> */}
-
-                        <p className="mt-1 text-xs text-red-50/70">
-                          {player.id === room.hostId ? "Room host" : "Player"}
-                          {player.id === playerId ? " · You" : ""}
-                          {!player.connected ? " · Disconnected" : ""}
+                        <p className="text-sm text-white/60">
+                          {player.connected
+                            ? "🟢 Connected"
+                            : "🔴 Disconnected"}
                         </p>
                       </div>
+
+                      {playerId === room.hostId &&
+                        player.id !== room.hostId &&
+                        !player.connected && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              socket.emit("room:player:kick", {
+                                playerId: player.id,
+                              });
+                            }}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                          >
+                            Kick
+                          </button>
+                        )}
                     </div>
                   ))}
                 </div>
@@ -1617,15 +1796,15 @@ export default function Home() {
                     } else if (room.players.length === 3) {
                       seatPosition =
                         opponentIndex === 0
-                          ? "left-0 top-[39%] w-[22%] -translate-y-1/2 sm:left-5 sm:w-[min(26%,200px)]"
+                          ? "left-3 top-[39%] w-[25%] -translate-y-1/2 sm:left-5 sm:w-[min(26%,200px)]"
                           : "right-0 top-[39%] w-[22%] -translate-y-1/2 sm:right-5 sm:w-[min(26%,200px)]";
                     } else {
                       seatPosition =
                         opponentIndex === 0
                           ? "left-1/2 top-[10%] w-[min(54%,220px)] -translate-x-1/2"
                           : opponentIndex === 1
-                            ? "left-8 top-[35%] w-[20%] -translate-y-1/2 sm:left-5 sm:w-[min(27%,170px)]"
-                            : "right-0 top-[35%] w-[20%] -translate-y-1/2 sm:right-5 sm:w-[min(27%,170px)]";
+                            ? "left-8 top-[22%] w-[20%] -translate-y-1/2 sm:left-5 sm:w-[min(27%,170px)]"
+                            : "right-0 top-[22%] w-[20%] -translate-y-1/2 sm:right-5 sm:w-[min(27%,170px)]";
                     }
 
                     return (
@@ -1674,9 +1853,9 @@ export default function Home() {
                                     (room.players.length >= 4 &&
                                       (opponentIndex === 1 ||
                                         opponentIndex === 2));
-                                  const cardWidth = isSideSeat ? 36 : 42;
-                                  const cardHeight = isSideSeat ? 52 : 62;
-                                  const spacing = isSideSeat ? 10 : 15;
+                                  const cardWidth = isSideSeat ? 58 : 78;
+                                  const cardHeight = isSideSeat ? 82 : 116;
+                                  const spacing = isSideSeat ? 16 : 25;
                                   const offset =
                                     cardIndex - (cardCount - 1) / 2;
                                   const isRightSideSeat =

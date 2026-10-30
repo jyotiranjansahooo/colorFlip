@@ -208,17 +208,17 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(140, 35, 34, 0.14);
 }
 
-/* Primary action buttons */
-button.bg-blue-700,
-button.bg-blue-600 {
+/* Primary action buttons only — never recolor playing cards */
+button.bg-blue-700:not([data-playing-card]),
+button.bg-blue-600:not([data-playing-card]) {
   color: #FFFFFF !important;
   background: linear-gradient(135deg, #A93632, #8C2322) !important;
   border-color: transparent !important;
   box-shadow: 0 7px 16px rgba(105, 25, 24, 0.2);
 }
 
-button.bg-blue-700:hover,
-button.bg-blue-600:hover {
+button.bg-blue-700:not([data-playing-card]):hover,
+button.bg-blue-600:not([data-playing-card]):hover {
   background: linear-gradient(135deg, #B7433D, #76201E) !important;
   box-shadow: 0 9px 20px rgba(105, 25, 24, 0.28);
 }
