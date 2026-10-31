@@ -97,10 +97,6 @@ function makeGuestName(): string {
   return adjective + noun + number;
 }
 
-/* ------------------------------------------------------------------ */
-/* Animation helpers                                                   */
-/* ------------------------------------------------------------------ */
-
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -175,8 +171,6 @@ function HowToFallback() {
   );
 }
 
-// Lazy-loaded (separate JS chunks, client only). GSAP ScrollTrigger lives
-// inside these chunks so it is not downloaded until they are needed.
 const LazyCardShowcase = dynamic(() => import("@/components/CardShowcase"), {
   ssr: false,
   loading: () => <ShowcaseFallback label="Loading card showcase..." />,
@@ -568,7 +562,24 @@ export default function Home() {
         "Cannot connect to the game server. Check that the backend is running.",
       );
     };
+    const handlePlayerKicked = (payload: { message?: string }) => {
+      localStorage.removeItem(RECONNECT_STORAGE_KEY);
 
+      reconnectingRef.current = false;
+      setIsReconnecting(false);
+      setIsConnecting(false);
+
+      setRoom(null);
+      setPlayerId("");
+      setRoomCode("");
+      setWildCard(null);
+      setError("");
+      setNotice(payload.message ?? "You were kicked out by the host.");
+
+      const url = new URL(window.location.href);
+      url.searchParams.delete("room");
+      window.history.replaceState({}, "", url.toString());
+    };
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("room:created", handleRoomCreated);
@@ -577,6 +588,7 @@ export default function Home() {
     socket.on("room:state", handleRoomState);
     socket.on("room:error", handleRoomError);
     socket.on("connect_error", handleConnectError);
+    socket.on("room:kicked", handlePlayerKicked);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -587,6 +599,7 @@ export default function Home() {
       socket.off("room:state", handleRoomState);
       socket.off("room:error", handleRoomError);
       socket.off("connect_error", handleConnectError);
+      socket.off("room:kicked", handlePlayerKicked);
     };
   }, []);
 
@@ -1232,44 +1245,79 @@ export default function Home() {
       pieces.forEach((piece) => piece.remove());
     };
   }, [roomStatus]);
+  useEffect(() => {
+    if (!notice) return;
 
+    const timer = window.setTimeout(() => {
+      setNotice("");
+    }, 2000);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
   return (
     <main ref={mainRef} className="min-h-screen overflow-x-hidden text-white">
-      {/* Winner celebration overlay */}
+      {notice && (
+        <div
+          role="status"
+          className="fixed right-4 top-4 z-[9999] rounded-xl border border-red-400/40 bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl"
+        >
+          🔔 {notice}
+        </div>
+      )}
+      {/* Winner and loser celebration overlay */}
       {roomStatus === "finished" && game?.winnerId && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/50 px-5 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/60 px-5 backdrop-blur-md"
           role="dialog"
           aria-modal="true"
           aria-labelledby="winner-title"
         >
           <div
             data-winner
-            className="relative w-full max-w-md rounded-3xl border-2 border-yellow-300/80 bg-gradient-to-br from-red-700 via-red-800 to-rose-950 p-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.35)] sm:p-10"
+            className={
+              "relative w-full max-w-md rounded-3xl border-2 p-8 text-center shadow-2xl sm:p-10 " +
+              (game.winnerId === playerId
+                ? "border-yellow-300/80 bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-950 shadow-emerald-400/30"
+                : "border-rose-400/80 bg-gradient-to-br from-red-700 via-rose-950 to-slate-950 shadow-rose-500/40")
+            }
           >
-            {/* Trophy */}
-            <div className="mb-4 text-6xl sm:text-7xl">🏆</div>
+            <div
+              className={
+                "mb-4 text-6xl sm:text-7xl " +
+                (game.winnerId === playerId ? "" : "animate-bounce")
+              }
+            >
+              {game.winnerId === playerId ? "🏆" : "💥"}
+            </div>
 
-            {/* Celebration heading */}
             <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-300 sm:text-base">
               Game Over
             </p>
 
             <h2
               id="winner-title"
-              className="mt-4 text-3xl font-black leading-tight text-white sm:text-5xl"
+              className={
+                "mt-4 text-3xl font-black leading-tight text-white sm:text-5xl " +
+                (game.winnerId === playerId ? "" : "animate-pulse")
+              }
             >
-              🎉 {winnerName} 🎉
+              {game.winnerId === playerId
+                ? "🎉 " + winnerName + " 🎉"
+                : "YOU LOSE!"}
             </h2>
 
             <p className="mt-4 text-lg font-bold text-yellow-200 sm:text-xl">
-              YOU WON!
+              {game.winnerId === playerId
+                ? "YOU WON!"
+                : "BETTER LUCK NEXT TIME!"}
             </p>
 
             <div className="mx-auto mt-6 h-1.5 w-24 rounded-full bg-yellow-300" />
 
             <p className="mt-5 text-sm text-white/80 sm:text-base">
-              Congratulations on winning UNO!
+              {game.winnerId === playerId
+                ? "Congratulations on winning ColorFlip!"
+                : winnerName + " won this round. Ready for a rematch?"}
             </p>
 
             <div className="mt-6 flex flex-col gap-3">
@@ -1284,7 +1332,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="min-h-12 w-full rounded-xl border border-yellow-300/60 px-5 py-3 font-bold text-white transition hover:bg-white/10"
+                className="min-h-12 w-full rounded-xl border border-white/40 px-5 py-3 font-bold text-white transition hover:bg-white/10"
               >
                 🔄 Play Again
               </button>
@@ -1545,24 +1593,22 @@ export default function Home() {
                   📋 Copy Room Code
                 </button>
 
-                {isHost && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={shareRoom}
-                      className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
-                    >
-                      🔗 Share Invite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={shareOnWhatsApp}
-                      className="min-h-11 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
-                    >
-                      WhatsApp
-                    </button>
-                  </>
-                )}
+                <>
+                  <button
+                    type="button"
+                    onClick={shareRoom}
+                    className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
+                  >
+                    🔗 Share Invite
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareOnWhatsApp}
+                    className="min-h-11 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
+                  >
+                    WhatsApp
+                  </button>
+                </>
               </div>
             </div>
 
@@ -1688,8 +1734,7 @@ export default function Home() {
                       </div>
 
                       {playerId === room.hostId &&
-                        player.id !== room.hostId &&
-                        !player.connected && (
+                        player.id !== room.hostId && (
                           <button
                             type="button"
                             onClick={() => {

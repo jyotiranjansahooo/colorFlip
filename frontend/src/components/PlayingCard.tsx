@@ -75,10 +75,11 @@ export default function PlayingCard({
 
   const cornerLabel = isDrawFour ? "+4" : label;
 
-  const background = isWild
-    ? "linear-gradient(135deg, #ED1C2E 0%, #ED1C2E 25%, #0878F9 25%, #0878F9 50%, #35AD50 50%, #35AD50 75%, #FFD928 75%, #FFD928 100%)"
-    : getCardColor(card.color);
-
+  const background = isDrawFour
+    ? "linear-gradient(145deg, #172554 0%, #1D4ED8 55%, #60A5FA 100%)"
+    : isWild
+      ? "linear-gradient(135deg, #ED1C2E 0%, #ED1C2E 25%, #0878F9 25%, #0878F9 50%, #35AD50 50%, #35AD50 75%, #FFD928 75%, #FFD928 100%)"
+      : getCardColor(card.color);
   return (
     <button
       data-playing-card
@@ -104,30 +105,40 @@ export default function PlayingCard({
 
       {isWild ? (
         <>
-          <span className="absolute left-1 top-1 z-20 text-[9px] font-black leading-none text-white sm:text-[10px]">
+          <span className="absolute left-1.5 top-1.5 z-20 text-[10px] font-black leading-none text-white sm:text-xs">
             {cornerLabel}
           </span>
 
-          <span className="relative z-10 flex flex-col items-center justify-center gap-1">
-            <span className="text-center text-[15px] font-black leading-none tracking-tight text-gray-900 sm:text-lg">
-              WILD
+          <span
+            className={
+              "absolute left-[8%] top-[12%] h-[76%] w-[84%] rounded-[50%] " +
+              (isDrawFour
+                ? "bg-gradient-to-br from-white via-slate-100 to-blue-100"
+                : "bg-white")
+            }
+            style={{ transform: "rotate(-32deg) scale(1.05)" }}
+          />
+
+          <span className="relative z-10 flex flex-col items-center justify-center gap-1.5">
+            <span className="text-center text-sm font-black leading-none tracking-tight sm:text-base">
+              {isDrawFour ? "DRAW FOUR" : "WILD"}
             </span>
 
             {isDrawFour && (
-              <span className="text-2xl font-black leading-none text-gray-900 sm:text-3xl">
+              <span className="text-3xl font-black leading-none tracking-tighter text-blue-700 sm:text-4xl">
                 +4
               </span>
             )}
 
-            <span className="flex -space-x-1">
-              <span className="h-3 w-3 rotate-12 rounded-sm bg-yellow-400 sm:h-3.5 sm:w-3.5" />
-              <span className="h-3 w-3 rotate-12 rounded-sm bg-blue-500 sm:h-3.5 sm:w-3.5" />
-              <span className="h-3 w-3 rotate-12 rounded-sm bg-red-500 sm:h-3.5 sm:w-3.5" />
-              <span className="h-3 w-3 rotate-12 rounded-sm bg-green-500 sm:h-3.5 sm:w-3.5" />
+            <span className="flex items-center justify-center gap-1">
+              <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-red-500 sm:h-3 sm:w-3" />
+              <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-yellow-400 sm:h-3 sm:w-3" />
+              <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-green-500 sm:h-3 sm:w-3" />
+              <span className="h-2.5 w-2.5 rotate-45 rounded-[2px] bg-blue-500 sm:h-3 sm:w-3" />
             </span>
           </span>
 
-          <span className="absolute bottom-1 right-1 z-20 rotate-180 text-[9px] font-black leading-none text-white sm:text-[10px]">
+          <span className="absolute bottom-1.5 right-1.5 z-20 rotate-180 text-[10px] font-black leading-none text-white sm:text-xs">
             {cornerLabel}
           </span>
         </>

@@ -1438,17 +1438,12 @@ function handleKickPlayer(socket: Socket, payload: unknown, io: Server): void {
     return;
   }
 
-  if (target.connected) {
-    emitRoomError(socket, "You can only kick disconnected players.");
-    return;
-  }
-
   const targetSocketId = findSocketId(room, target.id);
 
   if (targetSocketId) {
     sessions.delete(targetSocketId);
     io.to(targetSocketId).emit("room:kicked", {
-      message: "The host removed you from the room.",
+      message: "You just got kicked out by " + player.name + ".",
     });
     io.sockets.sockets.get(targetSocketId)?.disconnect(true);
   }

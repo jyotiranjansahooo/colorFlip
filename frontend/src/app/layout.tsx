@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import InitialLoadingScreen from "@/components/InitialLoadingScreen";
 
 export const metadata: Metadata = {
   title: "ColorFlip — Multiplayer Card Game",
@@ -9,8 +8,8 @@ export const metadata: Metadata = {
     "Play ColorFlip with friends or challenge the computer in this exciting multiplayer card game.",
   applicationName: "ColorFlip",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: [{ url: "/logo.png", type: "image/png" }],
+    apple: [{ url: "/logo.png", type: "image/png" }],
   },
 };
 
@@ -30,9 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {" "}
-        <InitialLoadingScreen />
+      <body className="flex min-h-full flex-col">
         {children}
       </body>
     </html>
