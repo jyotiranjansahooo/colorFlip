@@ -798,12 +798,21 @@ export default function Home() {
     setError("");
     setNotice("Saving name...");
 
+    if (!socket.connected) {
+      setError("Connection lost. Please wait for reconnection.");
+      return;
+    }
+
     socket.emit("room:player:rename", { name: cleanName });
     setRenameDraft(cleanName);
   }
-
   function chooseAvatar(avatarId: PlayerAvatarId) {
     if (!room || !playerId) return;
+
+    if (!socket.connected) {
+      setError("Connection lost. Please wait for reconnection.");
+      return;
+    }
 
     setError("");
     setNotice("Saving avatar...");
@@ -1722,7 +1731,7 @@ export default function Home() {
             {room.status === "waiting" ? (
               <div
                 data-panel
-                className="mt-6 rounded-3xl border border-sky-200/20 bg-gradient-to-br from-[#285A91] via-[#17345F] to-[#102746] p-5 sm:mt-8 sm:p-8"
+                className="mt-6 rounded-3xl border border-red-200/25 bg-gradient-to-br from-[#B83232] via-[#8F2028] to-[#54151D] p-5 sm:mt-8 sm:p-8"
               >
                 <h2 className="text-xl font-bold">Players in the lobby</h2>
 
@@ -1732,7 +1741,7 @@ export default function Home() {
                 </p>
 
                 {/* Your guest profile: rename and choose a persistent avatar. */}
-                <div className="mt-5 rounded-2xl border border-sky-200/15 bg-[#17345F]/55 p-4 sm:p-5">
+                <div className="mt-5 rounded-2xl border border-sky-200/15 bg-[#681B24]/70 p-4 sm:p-5">
                   <h3 className="font-bold text-white">Your player profile</h3>
                   <form
                     className="mt-3 flex flex-col gap-2 sm:flex-row"
@@ -1768,7 +1777,7 @@ export default function Home() {
                     />
                     <button
                       type="submit"
-                      className="min-h-11 rounded-xl bg-sky-300 px-4 py-2 text-sm font-bold text-[#102746] hover:bg-sky-200"
+                      className="min-h-11 rounded-xl bg-red-700/40 px-4 py-2 text-sm font-bold text-white hover:bg-red-600"
                     >
                       Save name
                     </button>
@@ -1816,7 +1825,7 @@ export default function Home() {
                 </div>
 
                 {isHost ? (
-                  <div className="mt-6 rounded-2xl border border-sky-200/15 bg-[#17345F]/50 p-4 sm:p-5">
+                  <div className="mt-6 rounded-2xl border border-sky-200/15 bg-[#681B24]/70 p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="font-bold text-white">
@@ -1846,8 +1855,8 @@ export default function Home() {
                             className={
                               "min-h-24 rounded-2xl border px-3 py-4 text-center transition " +
                               (selected
-                                ? "border-[#F5C56B] bg-[#B7D9A8] text-[#17345F] shadow-lg shadow-black/10"
-                                : "border-sky-200/20 bg-[#17345F]/70 text-white hover:border-sky-300/70 hover:bg-[#285A91]") +
+                                ? "border-red-600 bg-[#6f1727] text-white shadow-lg shadow-black/10"
+                                : "border-red-600/50 bg-red-700/40 text-white hover:border-red-500 hover:bg-red-600/60") +
                               (cannotSelect
                                 ? " cursor-not-allowed opacity-40"
                                 : "")
@@ -1994,7 +2003,7 @@ export default function Home() {
 
                   <div
                     data-color-chip
-                    className="flex items-center gap-2 rounded-full border border-red-50/20 bg-[#17345F]/50 px-3 py-2"
+                    className="flex items-center gap-2 rounded-full border border-red-50/20 bg-[#681B24]/70 px-3 py-2"
                   >
                     <Palette size={16} aria-hidden="true" />
                     <span className="text-xs font-bold uppercase tracking-wider">
@@ -2262,7 +2271,7 @@ export default function Home() {
                   leaveRoom();
                 }
               }}
-              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200/30 bg-[#17345F]/60 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#102746]/80"
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200/30 bg-red-600/50 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#102746]/80"
             >
               <span aria-hidden="true">↗</span>
               Leave Room
