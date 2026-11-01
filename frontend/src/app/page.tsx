@@ -437,6 +437,10 @@ function WildColorDialog({
 }
 
 export default function Home() {
+  const [specialGif, setSpecialGif] = useState<string | null>(null);
+  const [specialPopup, setSpecialPopup] = useState<string | null>(null);
+
+  const specialNameTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [name, setName] = useState("");
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState(() => {
@@ -467,6 +471,56 @@ export default function Home() {
   const seenPlayersRef = useRef<Set<string>>(new Set());
   const seenCardsRef = useRef<Set<string>>(new Set());
   const prevTopCardRef = useRef<string | null>(null);
+
+  const specialNames: Record<string, string> = {
+    king: "👑 The King has arrived!",
+    queen: "👸 The Queen has arrived!",
+    gayatri: " Gaie is here!",
+    sandeepa: "✨ cutie pie is here!",
+    anushka: "🌸 Dhoni Dhoni!",
+  };
+  const specialReactions: Record<string, { message: string; gif: string }> = {
+    king: {
+      message: "👑 The King has arrived!",
+      gif: "/reaction/king.gif",
+    },
+    queen: {
+      message: "👸 The Queen has arrived!",
+      gif: "/reaction/queen.gif",
+    },
+    gayatri: {
+      message: "Gayi is here!",
+      gif: "/reaction/gayatri.gif",
+    },
+    sandeepa: {
+      message: "😍 cutie is here!",
+      gif: "/reaction/sandeepa.gif",
+    },
+    anushka: {
+      message: "Dhoni is here!",
+      gif: "/reaction/anushka.gif",
+    },
+  };
+
+  function handleNicknameTyping(value: string) {
+    setRenameDraft(value);
+
+    if (specialNameTimer.current) {
+      clearTimeout(specialNameTimer.current);
+    }
+
+    setSpecialPopup(null);
+    setSpecialGif(null);
+
+    specialNameTimer.current = setTimeout(() => {
+      const reaction = specialReactions[value.trim().toLowerCase()];
+
+      if (reaction) {
+        setSpecialPopup(reaction.message);
+        setSpecialGif(reaction.gif);
+      }
+    }, 1500);
+  }
 
   useEffect(() => {
     const handleConnect = () => {
@@ -729,19 +783,31 @@ export default function Home() {
 
     if (!currentPlayer) return;
 
-    const cleanName = (renameDraft ?? currentPlayer.name).trim();
+    const cleanName = (renameDraft ?? currentPlayer.name)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "")
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 20);
 
-    if (!cleanName) return;
+    if (!cleanName) {
+      setError("Enter a valid name.");
+      return;
+    }
+
+    setError("");
+    setNotice("Saving name...");
 
     socket.emit("room:player:rename", { name: cleanName });
-    setRenameDraft(null);
+    setRenameDraft(cleanName);
   }
 
   function chooseAvatar(avatarId: PlayerAvatarId) {
     if (!room || !playerId) return;
 
     setError("");
-    setNotice("");
+    setNotice("Saving avatar...");
+
     socket.emit("room:player:avatar", { avatarId });
   }
 
@@ -1307,13 +1373,15 @@ export default function Home() {
             </h2>
 
             <p className="mt-4 text-lg font-bold text-yellow-200 sm:text-xl">
-              YOU WON!
+              {game?.winnerId === playerId ? "YOU WON! 🎉" : "YOU LOST! 😢"}
             </p>
 
             <div className="mx-auto mt-6 h-1.5 w-24 rounded-full bg-yellow-300" />
 
             <p className="mt-5 text-sm text-white/80 sm:text-base">
-              Congratulations on winning UNO!
+              {game?.winnerId === playerId
+                ? "Congratulations on winning UNO!"
+                : winnerName + " won the game. Better luck next time!"}
             </p>
 
             <div className="mt-6 flex flex-col gap-3">
@@ -1333,6 +1401,29 @@ export default function Home() {
                 🔄 Play Again
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {specialPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-sky-400/40 bg-slate-900 p-6 text-center shadow-2xl">
+            {specialGif && (
+              <img
+                src={specialGif}
+                alt="Special reaction"
+                className="mx-auto mb-5 h-[50vh] max-h-[500px] min-h-[220px] w-full rounded-xl object-contain"
+              />
+            )}
+            <h2 className="text-xl font-extrabold text-slate-900 sm:text-2xl">
+              {specialPopup}
+            </h2>
+            <button
+              type="button"
+              onClick={() => setSpecialPopup(null)}
+              className="mt-6 rounded-xl bg-sky-500 px-6 py-3 font-semibold text-white hover:bg-sky-400"
+            >
+              Continue
+            </button>
           </div>
         </div>
       )}
@@ -1465,31 +1556,44 @@ export default function Home() {
                 className="rounded-3xl border border-slate-700 bg-slate-900 p-5 sm:p-7 md:p-8"
               >
                 <h2 className="text-2xl font-bold">Join the fun 🎮</h2>
-
                 <p className="mt-2 text-sm leading-6 text-slate-400">
                   No account needed. Use lowercase letters and numbers, without
                   spaces.
                 </p>
-
                 <label
                   htmlFor="nickname"
                   className="mt-6 block text-sm font-medium text-slate-300"
                 >
                   Your guest name
                 </label>
-
                 <input
                   id="nickname"
                   value={name}
-                  onChange={(event) =>
-                    setName(
-                      event.target.value
-                        .toLowerCase()
-                        .replace(/\s+/g, "")
-                        .replace(/[^a-z0-9]/g, "")
-                        .slice(0, 20),
-                    )
-                  }
+                  onChange={(event) => {
+                    const value = event.target.value
+                      .toLowerCase()
+                      .replace(/\s+/g, "")
+                      .replace(/[^a-z0-9]/g, "")
+                      .slice(0, 20);
+
+                    setName(value);
+
+                    if (specialNameTimer.current) {
+                      clearTimeout(specialNameTimer.current);
+                    }
+
+                    setSpecialPopup(null);
+                    setSpecialGif(null);
+
+                    specialNameTimer.current = setTimeout(() => {
+                      const reaction = specialReactions[value];
+
+                      if (reaction) {
+                        setSpecialPopup(reaction.message);
+                        setSpecialGif(reaction.gif);
+                      }
+                    }, 1500);
+                  }}
                   maxLength={20}
                   autoComplete="nickname"
                   placeholder="e.g. swiftotter482"
@@ -1504,7 +1608,6 @@ export default function Home() {
                 >
                   ↻ Generate another guest name
                 </button>
-
                 <button
                   type="button"
                   disabled={isConnecting}
@@ -1513,20 +1616,17 @@ export default function Home() {
                 >
                   {isConnecting ? "Connecting..." : "✨ Create Private Room"}
                 </button>
-
                 <div className="my-5 flex items-center gap-4 text-xs text-slate-500">
                   <div className="h-px flex-1 bg-slate-700" />
                   OR JOIN FRIENDS
                   <div className="h-px flex-1 bg-slate-700" />
                 </div>
-
                 <label
                   htmlFor="room-code"
                   className="block text-sm font-medium text-slate-300"
                 >
                   Room code
                 </label>
-
                 <input
                   id="room-code"
                   value={roomCode}
@@ -1543,7 +1643,6 @@ export default function Home() {
                   placeholder="e.g. A1B2C3"
                   className="mt-2 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 uppercase tracking-widest outline-none focus:border-sky-400"
                 />
-
                 <button
                   type="button"
                   disabled={isConnecting}
@@ -1552,7 +1651,6 @@ export default function Home() {
                 >
                   {isConnecting ? "Connecting..." : "🔑 Join Room"}
                 </button>
-
                 {error && (
                   <p role="alert" className="mt-4 text-sm text-sky-300">
                     {error}
@@ -1655,7 +1753,7 @@ export default function Home() {
                         ""
                       }
                       onChange={(event) =>
-                        setRenameDraft(
+                        handleNicknameTyping(
                           event.target.value
                             .toLowerCase()
                             .replace(/\s+/g, "")
