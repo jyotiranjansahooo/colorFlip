@@ -18,7 +18,7 @@ export default function GameControls({
   const controlsDisabled = !isMyTurn || !isPlaying;
 
   return (
-    <div className="absolute bottom-[190px] left-1/2 z-30 flex w-[92%] max-w-md -translate-x-1/2 items-center justify-center gap-2 sm:bottom-[220px] sm:gap-3">
+    <div className="absolute bottom-[140px] left-1/2 z-30 flex w-[92%] max-w-md -translate-x-1/2 items-center justify-center gap-2 sm:bottom-[220px] sm:gap-3">
       <button
         type="button"
         onClick={onDrawCard}

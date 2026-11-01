@@ -702,6 +702,36 @@ function handleJoinRoom(socket, payload, io) {
         console.error("Failed to save room after player joined:", error);
     });
 }
+function handleRenamePlayer(socket, payload, io) {
+    const sessionData = getSessionRoom(socket);
+    if (!sessionData) {
+        emitRoomError(socket, "Join a room first.");
+        return;
+    }
+    if (!isRecord(payload) || typeof payload.name !== "string") {
+        emitRoomError(socket, "Invalid nickname.");
+        return;
+    }
+    const { room, player } = sessionData;
+    const name = normalizeNickname(payload.name);
+    if (!isValidNickname(name)) {
+        emitRoomError(socket, "Use 1–20 lowercase letters or numbers, without spaces.");
+        return;
+    }
+    if (hasNickname(room, name, player.id)) {
+        emitRoomError(socket, "That nickname is already used in this room.");
+        return;
+    }
+    player.name = name;
+    const gamePlayer = room.game?.players.find((candidate) => candidate.id === player.id);
+    if (gamePlayer) {
+        gamePlayer.name = name;
+    }
+    emitRoomState(io, room);
+    void saveRoom(room, reconnectTokens).catch((error) => {
+        console.error("Failed to save renamed player:", error);
+    });
+}
 function handleUpdateRoomSettings(socket, payload, io) {
     const sessionData = getSessionRoom(socket);
     if (!sessionData) {
@@ -962,15 +992,11 @@ function handleKickPlayer(socket, payload, io) {
         emitRoomError(socket, "The host cannot kick themselves.");
         return;
     }
-    if (target.connected) {
-        emitRoomError(socket, "You can only kick disconnected players.");
-        return;
-    }
     const targetSocketId = findSocketId(room, target.id);
     if (targetSocketId) {
         sessions.delete(targetSocketId);
         io.to(targetSocketId).emit("room:kicked", {
-            message: "The host removed you from the room.",
+            message: "You just got kicked out by " + player.name + ".",
         });
         io.sockets.sockets.get(targetSocketId)?.disconnect(true);
     }
@@ -985,6 +1011,9 @@ export function registerRoomHandlers(io, socket) {
     });
     socket.on("room:create", (payload) => {
         handleCreateRoom(socket, payload, io);
+    });
+    socket.on("room:player:rename", (payload) => {
+        handleRenamePlayer(socket, payload, io);
     });
     socket.on("room:join", (payload) => {
         handleJoinRoom(socket, payload, io);

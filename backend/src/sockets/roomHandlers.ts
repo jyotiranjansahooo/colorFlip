@@ -57,9 +57,21 @@ interface RoomJoinedPayload {
   reconnectToken: string;
 }
 
+const VALID_AVATAR_IDS = [
+  "male-1",
+  "male-2",
+  "male-3",
+  "female-1",
+  "female-2",
+  "female-3",
+] as const;
+type PlayerAvatarId = (typeof VALID_AVATAR_IDS)[number];
+const DEFAULT_AVATAR_ID: PlayerAvatarId = "male-1";
+
 interface PublicPlayer {
   id: string;
   name: string;
+  avatarId: PlayerAvatarId;
   cardCount: number;
   connected: boolean;
   isComputer: boolean;
@@ -183,6 +195,39 @@ function createPlayer(name: string): Player {
   };
 }
 
+function getPlayerAvatarId(player: Player): PlayerAvatarId {
+  const avatarId = (player as Player & { avatarId?: string }).avatarId;
+  return VALID_AVATAR_IDS.find((id) => id === avatarId) ?? DEFAULT_AVATAR_ID;
+}
+
+function handleChooseAvatar(
+  socket: Socket,
+  payload: unknown,
+  io: Server,
+): void {
+  const sessionData = getSessionRoom(socket);
+  if (!sessionData) {
+    emitRoomError(socket, "Join a room first.");
+    return;
+  }
+  if (!isRecord(payload) || typeof payload.avatarId !== "string") {
+    emitRoomError(socket, "Invalid avatar selection.");
+    return;
+  }
+  const avatarId = VALID_AVATAR_IDS.find((id) => id === payload.avatarId);
+  if (!avatarId) {
+    emitRoomError(socket, "Choose one of the available avatars.");
+    return;
+  }
+
+  const { room, player } = sessionData;
+  (player as Player & { avatarId?: PlayerAvatarId }).avatarId = avatarId;
+  emitRoomState(io, room);
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save player avatar:", error);
+  });
+}
+
 function getSession(socket: Socket): SocketSession | undefined {
   return sessions.get(socket.id);
 }
@@ -236,6 +281,7 @@ function buildPublicState(room: Room, playerId: string): PublicRoomState {
     return {
       id: player.id,
       name: player.name,
+      avatarId: getPlayerAvatarId(player),
       cardCount: gamePlayer?.hand.length ?? player.hand.length,
       connected: player.connected,
       isComputer: player.isComputer ?? false,
@@ -939,6 +985,8 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
 
   const roomId = createRoomCode();
   const player = createPlayer(name);
+  (player as Player & { avatarId?: PlayerAvatarId }).avatarId =
+    DEFAULT_AVATAR_ID;
   const reconnectToken = randomBytes(32).toString("hex");
   reconnectTokens.set(player.id, reconnectToken);
 
@@ -1026,6 +1074,8 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   }
 
   const player = createPlayer(name);
+  (player as Player & { avatarId?: PlayerAvatarId }).avatarId =
+    DEFAULT_AVATAR_ID;
   const reconnectToken = randomBytes(32).toString("hex");
   reconnectTokens.set(player.id, reconnectToken);
 
@@ -1046,6 +1096,55 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
 
   void saveRoom(room, reconnectTokens).catch((error: unknown) => {
     console.error("Failed to save room after player joined:", error);
+  });
+}
+function handleRenamePlayer(
+  socket: Socket,
+  payload: unknown,
+  io: Server,
+): void {
+  const sessionData = getSessionRoom(socket);
+
+  if (!sessionData) {
+    emitRoomError(socket, "Join a room first.");
+    return;
+  }
+
+  if (!isRecord(payload) || typeof payload.name !== "string") {
+    emitRoomError(socket, "Invalid nickname.");
+    return;
+  }
+
+  const { room, player } = sessionData;
+  const name = normalizeNickname(payload.name);
+
+  if (!isValidNickname(name)) {
+    emitRoomError(
+      socket,
+      "Use 1–20 lowercase letters or numbers, without spaces.",
+    );
+    return;
+  }
+
+  if (hasNickname(room, name, player.id)) {
+    emitRoomError(socket, "That nickname is already used in this room.");
+    return;
+  }
+
+  player.name = name;
+
+  const gamePlayer = room.game?.players.find(
+    (candidate) => candidate.id === player.id,
+  );
+
+  if (gamePlayer) {
+    gamePlayer.name = name;
+  }
+
+  emitRoomState(io, room);
+
+  void saveRoom(room, reconnectTokens).catch((error: unknown) => {
+    console.error("Failed to save renamed player:", error);
   });
 }
 function handleUpdateRoomSettings(
@@ -1459,6 +1558,12 @@ export function registerRoomHandlers(io: Server, socket: Socket): void {
   });
   socket.on("room:create", (payload: unknown) => {
     handleCreateRoom(socket, payload, io);
+  });
+  socket.on("room:player:rename", (payload: unknown) => {
+    handleRenamePlayer(socket, payload, io);
+  });
+  socket.on("room:player:avatar", (payload: unknown) => {
+    handleChooseAvatar(socket, payload, io);
   });
 
   socket.on("room:join", (payload: unknown) => {

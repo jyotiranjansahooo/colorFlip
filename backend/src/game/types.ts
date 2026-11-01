@@ -26,6 +26,13 @@ export interface Card {
 export interface Player {
   id: string;
   name: string;
+  avatarId?:
+    | "male-1"
+    | "male-2"
+    | "male-3"
+    | "female-1"
+    | "female-2"
+    | "female-3";
   hand: Card[];
   connected: boolean;
   isComputer?: boolean;

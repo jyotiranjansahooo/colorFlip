@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import img from "next/image";
 import { socket } from "@/lib/socket";
 import dynamic from "next/dynamic";
 import { Suspense } from "react";
@@ -29,6 +30,25 @@ import type {
 
 const RECONNECT_STORAGE_KEY = "colorflip-reconnect";
 const validColors: CardColor[] = ["red", "blue", "green", "yellow"];
+
+const avatarIds = [
+  "male-1",
+  "male-2",
+  "male-3",
+  "female-1",
+  "female-2",
+  "female-3",
+] as const;
+
+type PlayerAvatarId = (typeof avatarIds)[number];
+
+function getAvatarPath(avatarId: string | undefined): string {
+  return (
+    "/" +
+    (avatarIds.includes(avatarId as PlayerAvatarId) ? avatarId : "male-1") +
+    ".png"
+  );
+}
 
 const cardColors: Record<CardColor, string> = {
   red: "bg-red-600 border-red-200 text-white",
@@ -96,6 +116,10 @@ function makeGuestName(): string {
 
   return adjective + noun + number;
 }
+
+/* ------------------------------------------------------------------ */
+/* Animation helpers                                                   */
+/* ------------------------------------------------------------------ */
 
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
@@ -171,6 +195,8 @@ function HowToFallback() {
   );
 }
 
+// Lazy-loaded (separate JS chunks, client only). GSAP ScrollTrigger lives
+// inside these chunks so it is not downloaded until they are needed.
 const LazyCardShowcase = dynamic(() => import("@/components/CardShowcase"), {
   ssr: false,
   loading: () => <ShowcaseFallback label="Loading card showcase..." />,
@@ -412,6 +438,7 @@ function WildColorDialog({
 
 export default function Home() {
   const [name, setName] = useState("");
+  const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [roomCode, setRoomCode] = useState(() => {
     if (typeof window === "undefined") return "";
 
@@ -562,24 +589,7 @@ export default function Home() {
         "Cannot connect to the game server. Check that the backend is running.",
       );
     };
-    const handlePlayerKicked = (payload: { message?: string }) => {
-      localStorage.removeItem(RECONNECT_STORAGE_KEY);
 
-      reconnectingRef.current = false;
-      setIsReconnecting(false);
-      setIsConnecting(false);
-
-      setRoom(null);
-      setPlayerId("");
-      setRoomCode("");
-      setWildCard(null);
-      setError("");
-      setNotice(payload.message ?? "You were kicked out by the host.");
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete("room");
-      window.history.replaceState({}, "", url.toString());
-    };
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("room:created", handleRoomCreated);
@@ -588,7 +598,6 @@ export default function Home() {
     socket.on("room:state", handleRoomState);
     socket.on("room:error", handleRoomError);
     socket.on("connect_error", handleConnectError);
-    socket.on("room:kicked", handlePlayerKicked);
 
     return () => {
       socket.off("connect", handleConnect);
@@ -599,7 +608,6 @@ export default function Home() {
       socket.off("room:state", handleRoomState);
       socket.off("room:error", handleRoomError);
       socket.off("connect_error", handleConnectError);
-      socket.off("room:kicked", handlePlayerKicked);
     };
   }, []);
 
@@ -712,6 +720,29 @@ export default function Home() {
         name: name.trim().toLowerCase(),
       });
     });
+  }
+
+  function renamePlayer() {
+    const currentPlayer = room?.players.find(
+      (player) => player.id === playerId,
+    );
+
+    if (!currentPlayer) return;
+
+    const cleanName = (renameDraft ?? currentPlayer.name).trim();
+
+    if (!cleanName) return;
+
+    socket.emit("room:player:rename", { name: cleanName });
+    setRenameDraft(null);
+  }
+
+  function chooseAvatar(avatarId: PlayerAvatarId) {
+    if (!room || !playerId) return;
+
+    setError("");
+    setNotice("");
+    socket.emit("room:player:avatar", { avatarId });
   }
 
   function startGame() {
@@ -1245,86 +1276,51 @@ export default function Home() {
       pieces.forEach((piece) => piece.remove());
     };
   }, [roomStatus]);
-  useEffect(() => {
-    if (!notice) return;
 
-    const timer = window.setTimeout(() => {
-      setNotice("");
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
-  }, [notice]);
   return (
     <main ref={mainRef} className="min-h-screen overflow-x-hidden text-white">
-      {notice && (
-        <div
-          role="status"
-          className="fixed right-4 top-4 z-[9999] rounded-xl border border-red-400/40 bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl"
-        >
-          🔔 {notice}
-        </div>
-      )}
-      {/* Winner and loser celebration overlay */}
+      {/* Winner celebration overlay */}
       {roomStatus === "finished" && game?.winnerId && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/60 px-5 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/50 px-5 backdrop-blur-md"
           role="dialog"
           aria-modal="true"
           aria-labelledby="winner-title"
         >
           <div
             data-winner
-            className={
-              "relative w-full max-w-md rounded-3xl border-2 p-8 text-center shadow-2xl sm:p-10 " +
-              (game.winnerId === playerId
-                ? "border-yellow-300/80 bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-950 shadow-emerald-400/30"
-                : "border-rose-400/80 bg-gradient-to-br from-red-700 via-rose-950 to-slate-950 shadow-rose-500/40")
-            }
+            className="relative w-full max-w-md rounded-3xl border-2 border-sky-300/70 bg-gradient-to-br from-[#285A91] via-[#17345F] to-[#102746] p-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.35)] sm:p-10"
           >
-            <div
-              className={
-                "mb-4 text-6xl sm:text-7xl " +
-                (game.winnerId === playerId ? "" : "animate-bounce")
-              }
-            >
-              {game.winnerId === playerId ? "🏆" : "💥"}
-            </div>
+            {/* Trophy */}
+            <div className="mb-4 text-6xl sm:text-7xl">🏆</div>
 
+            {/* Celebration heading */}
             <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-300 sm:text-base">
               Game Over
             </p>
 
             <h2
               id="winner-title"
-              className={
-                "mt-4 text-3xl font-black leading-tight text-white sm:text-5xl " +
-                (game.winnerId === playerId ? "" : "animate-pulse")
-              }
+              className="mt-4 text-3xl font-black leading-tight text-white sm:text-5xl"
             >
-              {game.winnerId === playerId
-                ? "🎉 " + winnerName + " 🎉"
-                : "YOU LOSE!"}
+              🎉 {winnerName} 🎉
             </h2>
 
             <p className="mt-4 text-lg font-bold text-yellow-200 sm:text-xl">
-              {game.winnerId === playerId
-                ? "YOU WON!"
-                : "BETTER LUCK NEXT TIME!"}
+              YOU WON!
             </p>
 
             <div className="mx-auto mt-6 h-1.5 w-24 rounded-full bg-yellow-300" />
 
             <p className="mt-5 text-sm text-white/80 sm:text-base">
-              {game.winnerId === playerId
-                ? "Congratulations on winning ColorFlip!"
-                : winnerName + " won this round. Ready for a rematch?"}
+              Congratulations on winning UNO!
             </p>
 
             <div className="mt-6 flex flex-col gap-3">
               <button
                 type="button"
                 onClick={leaveRoom}
-                className="min-h-12 w-full rounded-xl bg-yellow-300 px-5 py-3 font-bold text-red-950 transition hover:bg-yellow-200"
+                className="min-h-12 w-full rounded-xl bg-[#B7D9A8] px-5 py-3 font-bold text-[#17345F] transition hover:bg-[#D5EBCB]"
               >
                 🏠 Back to Home
               </button>
@@ -1332,7 +1328,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => window.location.reload()}
-                className="min-h-12 w-full rounded-xl border border-white/40 px-5 py-3 font-bold text-white transition hover:bg-white/10"
+                className="min-h-12 w-full rounded-xl border border-yellow-300/60 px-5 py-3 font-bold text-white transition hover:bg-white/10"
               >
                 🔄 Play Again
               </button>
@@ -1350,12 +1346,12 @@ export default function Home() {
           aria-label="ColorFlip home"
           className="shrink-0 text-xl font-black tracking-tight sm:text-2xl"
         >
-          <span className="text-rose-100">Color</span>
+          <span className="text-sky-100">Color</span>
           <span className="text-white">Flip</span>
           <span
             data-logo
             aria-hidden="true"
-            className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 bg-white text-xs font-black text-rose-700"
+            className="ml-2 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-white/70 bg-white text-xs font-black text-blue-800"
           >
             CF
           </span>
@@ -1413,7 +1409,7 @@ export default function Home() {
                   <span data-hero="title" className="block">
                     Ready to
                   </span>
-                  <span data-hero="title" className="block text-rose-100">
+                  <span data-hero="title" className="block text-sky-100">
                     flip the
                   </span>
                   <span data-hero="title" className="block">
@@ -1558,7 +1554,7 @@ export default function Home() {
                 </button>
 
                 {error && (
-                  <p role="alert" className="mt-4 text-sm text-rose-300">
+                  <p role="alert" className="mt-4 text-sm text-sky-300">
                     {error}
                   </p>
                 )}
@@ -1575,7 +1571,7 @@ export default function Home() {
           <div className="mx-auto max-w-4xl">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs tracking-widest text-red-50/90">
+                <p className="text-xs tracking-widest text-sky-100/90">
                   PRIVATE ROOM
                 </p>
 
@@ -1588,27 +1584,29 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={copyRoomCode}
-                  className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
+                  className="min-h-11 rounded-xl border border-sky-200/20 px-4 py-3 text-sm font-semibold hover:bg-[#285A91]"
                 >
                   📋 Copy Room Code
                 </button>
 
-                <>
-                  <button
-                    type="button"
-                    onClick={shareRoom}
-                    className="min-h-11 rounded-xl border border-red-100/20 px-4 py-3 text-sm font-semibold hover:bg-[#9F2928]"
-                  >
-                    🔗 Share Invite
-                  </button>
-                  <button
-                    type="button"
-                    onClick={shareOnWhatsApp}
-                    className="min-h-11 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
-                  >
-                    WhatsApp
-                  </button>
-                </>
+                {isHost && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={shareRoom}
+                      className="min-h-11 rounded-xl border border-sky-200/20 px-4 py-3 text-sm font-semibold hover:bg-[#285A91]"
+                    >
+                      🔗 Share Invite
+                    </button>
+                    <button
+                      type="button"
+                      onClick={shareOnWhatsApp}
+                      className="min-h-11 rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-500"
+                    >
+                      WhatsApp
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -1626,23 +1624,107 @@ export default function Home() {
             {room.status === "waiting" ? (
               <div
                 data-panel
-                className="mt-6 rounded-3xl border border-red-100/20 bg-gradient-to-br from-[#A93231] to-[#741B1B] p-5 sm:mt-8 sm:p-8"
+                className="mt-6 rounded-3xl border border-sky-200/20 bg-gradient-to-br from-[#285A91] via-[#17345F] to-[#102746] p-5 sm:mt-8 sm:p-8"
               >
                 <h2 className="text-xl font-bold">Players in the lobby</h2>
 
-                <p className="mt-2 text-sm text-red-50/70">
+                <p className="mt-2 text-sm text-sky-100/70">
                   Waiting for friends. {room.players.length}/
                   {room.settings.maxPlayers} players joined.
                 </p>
 
+                {/* Your guest profile: rename and choose a persistent avatar. */}
+                <div className="mt-5 rounded-2xl border border-sky-200/15 bg-[#17345F]/55 p-4 sm:p-5">
+                  <h3 className="font-bold text-white">Your player profile</h3>
+                  <form
+                    className="mt-3 flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      renamePlayer();
+                    }}
+                  >
+                    <label htmlFor="rename-player" className="sr-only">
+                      New guest name
+                    </label>
+                    <input
+                      id="rename-player"
+                      value={
+                        renameDraft ??
+                        room.players.find((player) => player.id === playerId)
+                          ?.name ??
+                        ""
+                      }
+                      onChange={(event) =>
+                        setRenameDraft(
+                          event.target.value
+                            .toLowerCase()
+                            .replace(/\s+/g, "")
+                            .replace(/[^a-z0-9]/g, "")
+                            .slice(0, 20),
+                        )
+                      }
+                      maxLength={20}
+                      autoComplete="nickname"
+                      placeholder="Your guest name"
+                      className="min-h-11 min-w-0 flex-1 rounded-xl border border-sky-200/20 bg-[#102746] px-3 py-2 text-sm text-white outline-none focus:border-sky-300"
+                    />
+                    <button
+                      type="submit"
+                      className="min-h-11 rounded-xl bg-sky-300 px-4 py-2 text-sm font-bold text-[#102746] hover:bg-sky-200"
+                    >
+                      Save name
+                    </button>
+                  </form>
+
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-sky-100/70">
+                    Choose your avatar
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-3">
+                    {avatarIds.map((avatarId) => {
+                      const currentPlayer = room.players.find(
+                        (player) => player.id === playerId,
+                      );
+                      const currentAvatarId =
+                        (
+                          currentPlayer as
+                            | (RoomPlayer & { avatarId?: string })
+                            | undefined
+                        )?.avatarId ?? "male-1";
+                      const selected = currentAvatarId === avatarId;
+
+                      return (
+                        <button
+                          key={avatarId}
+                          type="button"
+                          onClick={() => chooseAvatar(avatarId)}
+                          aria-label={"Choose " + avatarId + " avatar"}
+                          aria-pressed={selected}
+                          className={
+                            "rounded-full border-2 p-0.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300 " +
+                            (selected
+                              ? "border-[#F5C56B] ring-2 ring-[#F5C56B]/30"
+                              : "border-sky-200/20 hover:border-sky-200/70")
+                          }
+                        >
+                          <img
+                            src={getAvatarPath(avatarId)}
+                            alt={avatarId}
+                            className="h-12 w-12 rounded-full object-cover"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {isHost ? (
-                  <div className="mt-6 rounded-2xl border border-red-100/15 bg-[#651818]/35 p-4 sm:p-5">
+                  <div className="mt-6 rounded-2xl border border-sky-200/15 bg-[#17345F]/50 p-4 sm:p-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
                         <h3 className="font-bold text-white">
                           Players per room
                         </h3>
-                        <p className="mt-1 text-sm text-red-50/70">
+                        <p className="mt-1 text-sm text-sky-100/70">
                           Choose how many players can join before starting.
                         </p>
                       </div>
@@ -1666,8 +1748,8 @@ export default function Home() {
                             className={
                               "min-h-24 rounded-2xl border px-3 py-4 text-center transition " +
                               (selected
-                                ? "border-[#F5C56B] bg-[#F5C56B] text-[#541414] shadow-lg shadow-black/10"
-                                : "border-red-100/20 bg-[#8C2322]/60 text-white hover:border-[#F5C56B]/70 hover:bg-[#8C2322]") +
+                                ? "border-[#F5C56B] bg-[#B7D9A8] text-[#17345F] shadow-lg shadow-black/10"
+                                : "border-sky-200/20 bg-[#17345F]/70 text-white hover:border-sky-300/70 hover:bg-[#285A91]") +
                               (cannotSelect
                                 ? " cursor-not-allowed opacity-40"
                                 : "")
@@ -1690,7 +1772,7 @@ export default function Home() {
                       })}
                     </div>
 
-                    <p className="mt-3 text-xs text-red-50/60">
+                    <p className="mt-3 text-xs text-sky-100/60">
                       {room.players.length} of {room.settings.maxPlayers} seats
                       filled.
                       {room.players.length === room.settings.maxPlayers
@@ -1699,11 +1781,11 @@ export default function Home() {
                     </p>
                   </div>
                 ) : (
-                  <div className="mt-5 rounded-2xl border border-red-100/15 bg-[#651818]/30 p-4">
+                  <div className="mt-5 rounded-2xl border border-sky-200/15 bg-[#17345F]/45 p-4">
                     <p className="text-sm font-semibold text-white">
                       Room size: {room.settings.maxPlayers} players
                     </p>
-                    <p className="mt-1 text-xs text-red-50/65">
+                    <p className="mt-1 text-xs text-sky-100/65">
                       Only the host can change the player limit.
                     </p>
                   </div>
@@ -1715,22 +1797,36 @@ export default function Home() {
                       key={player.id}
                       className="flex items-center justify-between rounded-xl border border-white/10 p-4"
                     >
-                      <div>
-                        <p className="font-semibold text-white">
-                          {player.name}
-                          {player.id === room.hostId && (
-                            <span className="ml-2 text-yellow-300">(Host)</span>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <img
+                          src={getAvatarPath(
+                            (player as RoomPlayer & { avatarId?: string })
+                              .avatarId,
                           )}
-                          {player.id === playerId && (
-                            <span className="ml-2 text-emerald-300">(You)</span>
-                          )}
-                        </p>
+                          alt={player.name + " avatar"}
+                          className="h-11 w-11 shrink-0 rounded-full border-2 border-sky-200/70 bg-[#17345F] object-cover"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-white">
+                            {player.name}
+                            {player.id === room.hostId && (
+                              <span className="ml-2 text-yellow-300">
+                                (Host)
+                              </span>
+                            )}
+                            {player.id === playerId && (
+                              <span className="ml-2 text-emerald-300">
+                                (You)
+                              </span>
+                            )}
+                          </p>
 
-                        <p className="text-sm text-white/60">
-                          {player.connected
-                            ? "🟢 Connected"
-                            : "🔴 Disconnected"}
-                        </p>
+                          <p className="text-sm text-white/60">
+                            {player.connected
+                              ? "🟢 Connected"
+                              : "🔴 Disconnected"}
+                          </p>
+                        </div>
                       </div>
 
                       {playerId === room.hostId &&
@@ -1756,19 +1852,19 @@ export default function Home() {
                     type="button"
                     onClick={startGame}
                     disabled={room.players.length < 2}
-                    className="mt-7 min-h-12 w-full rounded-xl bg-[#F5C56B] text-[#541414] px-5 py-3 font-bold hover:bg-[#FFDA8C] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="mt-7 min-h-12 w-full rounded-xl bg-[#B7D9A8] text-[#17345F] px-5 py-3 font-bold hover:bg-[#CDE8C2] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {room.players.length < 2
                       ? "Waiting for another player..."
                       : "🚀 Start Game"}
                   </button>
                 ) : (
-                  <p className="mt-7 text-center text-sm text-red-50/70">
+                  <p className="mt-7 text-center text-sm text-sky-100/70">
                     Waiting for the host to start the game...
                   </p>
                 )}
 
-                <p className="mt-4 text-center text-xs text-red-50/55">
+                <p className="mt-4 text-center text-xs text-sky-100/55">
                   Share the room code with your friends to invite them.
                 </p>
               </div>
@@ -1776,7 +1872,7 @@ export default function Home() {
               /* Game board */
               <div
                 data-panel
-                className="game-table relative mt-3 min-h-[700px] overflow-hidden p-2 sm:mt-8 sm:min-h-[900px] sm:p-6 md:p-8"
+                className="game-table relative mt-3 min-h-[620px] overflow-hidden p-2 sm:mt-8 sm:min-h-[760px] sm:p-6 md:p-8"
               >
                 <div className="game-table-glow" />
 
@@ -1790,7 +1886,7 @@ export default function Home() {
                 {/* Game header */}
                 <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-bold tracking-[0.2em] text-red-50/80">
+                    <p className="text-xs font-bold tracking-[0.2em] text-sky-100/80">
                       COLORFLIP ARENA
                     </p>
                     <p className="mt-1 text-lg font-black sm:text-xl">
@@ -1800,7 +1896,7 @@ export default function Home() {
 
                   <div
                     data-color-chip
-                    className="flex items-center gap-2 rounded-full border border-red-50/20 bg-[#651818]/35 px-3 py-2"
+                    className="flex items-center gap-2 rounded-full border border-red-50/20 bg-[#17345F]/50 px-3 py-2"
                   >
                     <Palette size={16} aria-hidden="true" />
                     <span className="text-xs font-bold uppercase tracking-wider">
@@ -1822,27 +1918,27 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Seats arranged around the table. Your seat stays at the bottom. */}
+                {/* Opponent card stacks around the table */}
                 <div className="pointer-events-none absolute inset-0 z-10">
                   {room.players.map((player, index) => {
-                    const isCurrentPlayer = game.currentPlayerIndex === index;
                     const isYou = player.id === playerId;
+
+                    if (isYou) return null;
+
                     const opponentIndex = room.players
                       .filter((candidate) => candidate.id !== playerId)
                       .findIndex((candidate) => candidate.id === player.id);
+
                     let seatPosition = "";
 
-                    if (isYou) {
-                      seatPosition =
-                        "bottom-[125px] left-1/2 w-[96%] -translate-x-1/2 sm:bottom-32 sm:w-[min(76%,240px)]";
-                    } else if (room.players.length === 2) {
+                    if (room.players.length === 2) {
                       seatPosition =
                         "left-1/2 top-[17%] w-[min(70%,260px)] -translate-x-1/2";
                     } else if (room.players.length === 3) {
                       seatPosition =
                         opponentIndex === 0
-                          ? "left-3 top-[39%] w-[25%] -translate-y-1/2 sm:left-5 sm:w-[min(26%,200px)]"
-                          : "right-0 top-[39%] w-[22%] -translate-y-1/2 sm:right-5 sm:w-[min(26%,200px)]";
+                          ? "left-3 top-[33%] w-[25%] -translate-y-1/2 sm:left-5 sm:w-[min(26%,200px)]"
+                          : "right-0 top-[33%] w-[22%] -translate-y-1/2 sm:right-5 sm:w-[min(26%,200px)]";
                     } else {
                       seatPosition =
                         opponentIndex === 0
@@ -1852,123 +1948,98 @@ export default function Home() {
                             : "right-0 top-[22%] w-[20%] -translate-y-1/2 sm:right-5 sm:w-[min(27%,170px)]";
                     }
 
+                    const isSideSeat =
+                      room.players.length === 3 ||
+                      (room.players.length >= 4 &&
+                        (opponentIndex === 1 || opponentIndex === 2));
+
                     return (
                       <div
                         key={player.id}
-                        data-token-active={isCurrentPlayer ? "true" : undefined}
                         className={
-                          "pointer-events-auto absolute z-30 overflow-visible rounded-2xl border-0 bg-transparent p-3 shadow-none transition-all duration-200 " +
+                          "pointer-events-none absolute z-30 overflow-visible bg-transparent " +
                           seatPosition
                         }
                       >
-                        {!isYou && (
-                          <div className="w-full min-w-0">
-                            {/* {!(
-                              room.players.length === 3 ||
-                              (room.players.length >= 4 &&
-                                (opponentIndex === 1 || opponentIndex === 2))
-                            ) && (
-                              <p className="mb-3 truncate text-center text-sm font-extrabold text-white sm:text-base">
-                                {player.name}
-                              </p>
-                            )} */}
+                        <div
+                          className={
+                            "relative mx-auto flex w-full items-center justify-center overflow-visible " +
+                            (isSideSeat
+                              ? "h-[250px] sm:h-[300px]"
+                              : "h-[112px] sm:h-[140px]")
+                          }
+                          aria-label={
+                            "Opponent has " + player.cardCount + " cards"
+                          }
+                        >
+                          {Array.from({ length: player.cardCount }).map(
+                            (_, cardIndex) => {
+                              const cardCount = Math.max(player.cardCount, 1);
+                              const cardWidth = isSideSeat ? 38 : 52;
+                              const cardHeight = isSideSeat ? 54 : 74;
+                              const spacing = isSideSeat ? 9 : 15;
+                              const offset = cardIndex - (cardCount - 1) / 2;
 
-                            <div
-                              className={
-                                "relative mx-auto flex w-full items-center justify-center overflow-visible " +
-                                (room.players.length === 3 ||
-                                (room.players.length >= 4 &&
-                                  (opponentIndex === 1 || opponentIndex === 2))
-                                  ? "h-[250px] sm:h-[300px]"
-                                  : "h-[112px] sm:h-[140px]")
-                              }
-                              aria-label={
-                                "Opponent has " + player.cardCount + " cards"
-                              }
-                              title={player.cardCount + " cards"}
-                            >
-                              {Array.from({ length: player.cardCount }).map(
-                                (_, cardIndex) => {
-                                  const cardCount = Math.max(
-                                    player.cardCount,
-                                    1,
-                                  );
-                                  const isSideSeat =
-                                    room.players.length === 3 ||
-                                    (room.players.length >= 4 &&
-                                      (opponentIndex === 1 ||
-                                        opponentIndex === 2));
-                                  const cardWidth = isSideSeat ? 58 : 78;
-                                  const cardHeight = isSideSeat ? 82 : 116;
-                                  const spacing = isSideSeat ? 16 : 25;
-                                  const offset =
-                                    cardIndex - (cardCount - 1) / 2;
-                                  const isRightSideSeat =
-                                    room.players.length >= 4 &&
-                                    opponentIndex === 2;
-                                  const sideRotation =
-                                    opponentIndex === 1 ? 90 : -90;
-                                  const rotation = isSideSeat
-                                    ? sideRotation +
-                                      offset * (isRightSideSeat ? -2.8 : 2.8)
-                                    : offset * 2.8;
+                              const isRightSideSeat =
+                                room.players.length >= 4 && opponentIndex === 2;
 
-                                  return (
-                                    <div
-                                      key={player.id + "-card-" + cardIndex}
+                              const sideRotation =
+                                opponentIndex === 1 ? 90 : -90;
+
+                              const rotation = isSideSeat
+                                ? sideRotation +
+                                  offset * (isRightSideSeat ? -1.8 : 1.8)
+                                : offset * 1.8;
+
+                              return (
+                                <div
+                                  key={player.id + "-card-" + cardIndex}
+                                  className={
+                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden border-[3px] border-white bg-black shadow-[0_5px_12px_rgba(0,0,0,0.28)] " +
+                                    (isSideSeat
+                                      ? "rounded-[9px] sm:rounded-[10px]"
+                                      : "rounded-[13px] sm:rounded-[15px]")
+                                  }
+                                  style={{
+                                    width: cardWidth + "px",
+                                    height: cardHeight + "px",
+                                    marginLeft: isSideSeat
+                                      ? "0px"
+                                      : offset * spacing + "px",
+                                    marginTop: isSideSeat
+                                      ? offset * spacing + "px"
+                                      : "0px",
+                                    transform:
+                                      "translate(-50%, -50%) rotate(" +
+                                      rotation +
+                                      "deg)",
+                                    zIndex: cardIndex + 1,
+                                  }}
+                                >
+                                  <div className="absolute left-[-35%] top-[22%] h-[54%] w-[170%] rotate-[-35deg] rounded-[50%] bg-red-600" />
+                                  <div className="absolute left-[7%] top-[31%] h-[38%] w-[86%] rotate-[-35deg] rounded-[50%] border-2 border-white/95" />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <span
                                       className={
-                                        "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden border-[3px] border-white bg-black shadow-[0_5px_12px_rgba(0,0,0,0.28)] " +
+                                        "relative -rotate-[25deg] font-black italic tracking-tight text-yellow-400 " +
                                         (isSideSeat
-                                          ? "rounded-[9px] sm:rounded-[10px]"
-                                          : "rounded-[13px] sm:rounded-[15px]")
+                                          ? "text-[9px]"
+                                          : "text-[11px] sm:text-sm")
                                       }
                                       style={{
-                                        width: cardWidth + "px",
-                                        height: cardHeight + "px",
-                                        marginLeft: isSideSeat
-                                          ? "0px"
-                                          : offset * spacing + "px",
-                                        marginTop: isSideSeat
-                                          ? offset * spacing + "px"
-                                          : "0px",
-                                        transform:
-                                          "translate(-50%, -50%) rotate(" +
-                                          rotation +
-                                          "deg)",
-                                        zIndex: cardIndex + 1,
+                                        WebkitTextStroke: "0.7px white",
+                                        textShadow:
+                                          "2px 2px 0 #111, -1px -1px 0 #111",
                                       }}
                                     >
-                                      <div className="absolute left-[-35%] top-[22%] h-[54%] w-[170%] rotate-[-35deg] rounded-[50%] bg-red-600" />
-                                      <div className="absolute left-[7%] top-[31%] h-[38%] w-[86%] rotate-[-35deg] rounded-[50%] border-2 border-white/95" />
-                                      <div className="absolute inset-0 flex items-center justify-center">
-                                        <span
-                                          className={
-                                            "relative -rotate-[25deg] font-black italic tracking-tight text-yellow-400 " +
-                                            (isSideSeat
-                                              ? "text-[9px]"
-                                              : "text-[11px] sm:text-sm")
-                                          }
-                                          style={{
-                                            WebkitTextStroke: "0.7px white",
-                                            textShadow:
-                                              "2px 2px 0 #111, -1px -1px 0 #111",
-                                          }}
-                                        >
-                                          UNO
-                                        </span>
-                                      </div>
-                                    </div>
-                                  );
-                                },
-                              )}
-                            </div>
-
-                            <p className="hidden">
-                              {player.cardCount}{" "}
-                              {player.cardCount === 1 ? "card" : "cards"}
-                            </p>
-                          </div>
-                        )}
+                                      UNO
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1976,9 +2047,9 @@ export default function Home() {
 
                 {/* Central card piles */}
 
-                <div className="absolute left-1/2 top-[53%] z-10 flex min-h-40 w-[min(68%,500px)] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-3 rounded-[999px] border-2 border-yellow-400/80 bg-[#741B1B]/45 px-3 py-4 shadow-[0_0_0_10px_rgba(245,197,107,0.07),inset_0_0_30px_rgba(0,0,0,0.12)] sm:top-1/2 sm:min-h-56 sm:w-[min(66%,500px)] sm:gap-10 sm:px-3 sm:py-8">
+                <div className="absolute left-1/2 top-[53%] z-10 flex min-h-40 w-[min(68%,500px)] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-3 rounded-[999px] border-2 border-yellow-400/80 bg-[#17345F]/45 px-3 py-4 shadow-[0_0_0_10px_rgba(245,197,107,0.07),inset_0_0_30px_rgba(0,0,0,0.12)] sm:top-1/2 sm:min-h-56 sm:w-[min(66%,500px)] sm:gap-10 sm:px-3 sm:py-8">
                   <div className="game-pile">
-                    {/* <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-red-50/80 sm:text-xs">
+                    {/* <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-sky-100/80 sm:text-xs">
                       DRAW PILE
                     </p> */}
 
@@ -2012,13 +2083,13 @@ export default function Home() {
                       </span>
                     </button>
 
-                    <p className="mt-3 text-center text-xs font-semibold text-red-50/85">
+                    <p className="mt-3 text-center text-xs font-semibold text-sky-100/85">
                       {game.drawPileCount} cards
                     </p>
                   </div>
 
                   <div className="game-pile">
-                    {/* <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-red-50/80 sm:text-xs">
+                    {/* <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-sky-100/80 sm:text-xs">
                       DISCARD PILE
                     </p> */}
 
@@ -2043,7 +2114,7 @@ export default function Home() {
                         </span>
                       </div>
                     ) : (
-                      <div className="flex h-28 w-[4.5rem] items-center justify-center rounded-2xl border-2 border-dashed border-red-100/40 bg-[#741B1B] text-xs text-red-50/65 sm:h-36 sm:w-24">
+                      <div className="flex h-28 w-[4.5rem] items-center justify-center rounded-2xl border-2 border-dashed border-sky-100/40 bg-[#17345F] text-xs text-sky-100/65 sm:h-36 sm:w-24">
                         Empty
                       </div>
                     )}
@@ -2077,7 +2148,7 @@ export default function Home() {
                 />
               </div>
             ) : (
-              <div className="mt-8 rounded-2xl border border-red-100/20 bg-[#741B1B] p-6 text-sm text-red-50/75">
+              <div className="mt-8 rounded-2xl border border-sky-200/20 bg-[#17345F] p-6 text-sm text-sky-100/75">
                 Waiting for the room state from the server...
               </div>
             )}
@@ -2093,7 +2164,7 @@ export default function Home() {
                   leaveRoom();
                 }
               }}
-              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-red-100/30 bg-[#651818]/50 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#541414]/70"
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200/30 bg-[#17345F]/60 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#102746]/80"
             >
               <span aria-hidden="true">↗</span>
               Leave Room

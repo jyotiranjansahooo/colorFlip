@@ -10,6 +10,7 @@ export interface RoomSettings {
 export interface RoomPlayer {
   id: string;
   name: string;
+  avatarId?: string;
   cardCount: number;
   connected: boolean;
 }
