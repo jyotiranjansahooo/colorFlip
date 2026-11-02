@@ -1,5 +1,14 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { deleteRoom, loadRooms, saveRoom, } from "../services/roomPersistence.js";
+const VALID_AVATAR_IDS = [
+    "male-1",
+    "male-2",
+    "male-3",
+    "female-1",
+    "female-2",
+    "female-3",
+];
+const DEFAULT_AVATAR_ID = "male-1";
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 4;
 const STARTING_HAND_SIZE = 7;
@@ -75,6 +84,32 @@ function createPlayer(name) {
         connected: true,
     };
 }
+function getPlayerAvatarId(player) {
+    const avatarId = player.avatarId;
+    return VALID_AVATAR_IDS.find((id) => id === avatarId) ?? DEFAULT_AVATAR_ID;
+}
+function handleChooseAvatar(socket, payload, io) {
+    const sessionData = getSessionRoom(socket);
+    if (!sessionData) {
+        emitRoomError(socket, "Join a room first.");
+        return;
+    }
+    if (!isRecord(payload) || typeof payload.avatarId !== "string") {
+        emitRoomError(socket, "Invalid avatar selection.");
+        return;
+    }
+    const avatarId = VALID_AVATAR_IDS.find((id) => id === payload.avatarId);
+    if (!avatarId) {
+        emitRoomError(socket, "Choose one of the available avatars.");
+        return;
+    }
+    const { room, player } = sessionData;
+    player.avatarId = avatarId;
+    emitRoomState(io, room);
+    void saveRoom(room, reconnectTokens).catch((error) => {
+        console.error("Failed to save player avatar:", error);
+    });
+}
 function getSession(socket) {
     return sessions.get(socket.id);
 }
@@ -109,6 +144,7 @@ function buildPublicState(room, playerId) {
         return {
             id: player.id,
             name: player.name,
+            avatarId: getPlayerAvatarId(player),
             cardCount: gamePlayer?.hand.length ?? player.hand.length,
             connected: player.connected,
             isComputer: player.isComputer ?? false,
@@ -617,6 +653,8 @@ function handleCreateRoom(socket, payload, io) {
     }
     const roomId = createRoomCode();
     const player = createPlayer(name);
+    player.avatarId =
+        DEFAULT_AVATAR_ID;
     const reconnectToken = randomBytes(32).toString("hex");
     reconnectTokens.set(player.id, reconnectToken);
     const room = {
@@ -685,6 +723,8 @@ function handleJoinRoom(socket, payload, io) {
         return;
     }
     const player = createPlayer(name);
+    player.avatarId =
+        DEFAULT_AVATAR_ID;
     const reconnectToken = randomBytes(32).toString("hex");
     reconnectTokens.set(player.id, reconnectToken);
     room.players.push(player);
@@ -1014,6 +1054,9 @@ export function registerRoomHandlers(io, socket) {
     });
     socket.on("room:player:rename", (payload) => {
         handleRenamePlayer(socket, payload, io);
+    });
+    socket.on("room:player:avatar", (payload) => {
+        handleChooseAvatar(socket, payload, io);
     });
     socket.on("room:join", (payload) => {
         handleJoinRoom(socket, payload, io);

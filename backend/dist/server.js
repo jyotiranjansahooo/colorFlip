@@ -21,10 +21,11 @@ const io = new Server(httpServer, {
         methods: ["GET", "POST"],
     },
 });
-app.get("/", (_req, res) => {
-    res.json({
+app.get("/health", (_req, res) => {
+    res.status(200).json({
         success: true,
-        message: "Welcome to ColorFlip API! 🎮",
+        message: "SlotGo backend is running",
+        timestamp: new Date().toISOString(),
     });
 });
 app.get("/health", (_req, res) => {
