@@ -1691,7 +1691,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={copyRoomCode}
-                  className="min-h-11 rounded-xl border border-sky-200/20 px-4 py-3 text-sm font-semibold hover:bg-[#285A91]"
+                  className="min-h-11 rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold hover:bg-[#c22323]"
                 >
                   📋 Copy Room Code
                 </button>
@@ -1701,7 +1701,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={shareRoom}
-                      className="min-h-11 rounded-xl border border-sky-200/20 px-4 py-3 text-sm font-semibold hover:bg-[#285A91]"
+                      className="min-h-11 rounded-xl border border-white/30 px-4 py-3 text-sm font-semibold hover:bg-[#d31515]"
                     >
                       🔗 Share Invite
                     </button>
@@ -1959,7 +1959,7 @@ export default function Home() {
                     type="button"
                     onClick={startGame}
                     disabled={room.players.length < 2}
-                    className="mt-7 min-h-12 w-full rounded-xl bg-[#B7D9A8] text-[#17345F] px-5 py-3 font-bold hover:bg-[#CDE8C2] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="mt-7 min-h-12 w-full rounded-xl bg-[#e31515] text-[#01070f] px-5 py-3 font-bold hover:bg-[#ef0808] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {room.players.length < 2
                       ? "Waiting for another player..."
