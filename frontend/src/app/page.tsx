@@ -477,6 +477,9 @@ export default function Home() {
     queen: "👸 The Queen has arrived!",
     gayatri: " Gaie is here!",
     sandeepa: "✨ cutie pie is here!",
+    sandeep: "✨ cutie pie is here!",
+    panda:" 🐼 Panda is here!",
+    pandasir:" 🐼 Panda is here!",
     anushka: "🌸 Dhoni Dhoni!",
     jenny: "jennie",
     jennie: "jennie",
@@ -496,6 +499,14 @@ export default function Home() {
       message: "👑 The King has arrived!",
       gif: "/reaction/subha.gif",
     },
+     panda: {
+      message: " The panda has arrived!",
+      gif: "/reaction/panda.gif",
+    },
+     pandasir: {
+      message: " The panda has arrived!",
+      gif: "/reaction/panda.gif",
+    },
     jenny: {
       message: "jenny has arrived!",
       gif: "/reaction/dog.gif",
@@ -505,11 +516,11 @@ export default function Home() {
       gif: "/reaction/jenny.gif",
     },
     riya: {
-      message: "riya has arrived!",
+      message: "🙏!",
       gif: "/reaction/riya.gif",
     },
     soyam: {
-      message: "👑 The King has arrived!",
+      message: "brain left the chat!",
       gif: "/reaction/king.gif",
     },
     god: {
@@ -517,11 +528,11 @@ export default function Home() {
       gif: "/reaction/god.gif",
     },
     swayamshree: {
-      message: "empty",
+      message: "🧠 empty",
       gif: "/reaction/soyam.gif",
     },
     swayam: {
-      message: "👑 The King has arrived!",
+      message: "jitu has arrived!",
       gif: "/reaction/soyam.gif",
     },
     queen: {
@@ -536,8 +547,12 @@ export default function Home() {
       message: "😍 cutie is here!",
       gif: "/reaction/sandeepa.gif",
     },
+    sandeep: {
+      message: "😍 cutie is here!",
+      gif: "/reaction/sandeep.gif",
+    },
     anushka: {
-      message: "Dhoni is here!",
+      message: "you leftur brain!",
       gif: "/reaction/anushka.gif",
     },
   };
