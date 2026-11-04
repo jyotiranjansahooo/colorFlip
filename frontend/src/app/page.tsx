@@ -59,7 +59,7 @@ const cardColors: Record<CardColor, string> = {
 
 const colorPickerStyles: Record<CardColor, string> = {
   red: "border-red-400/30 bg-red-600 hover:bg-red-500 text-white",
-  blue: "border-blue-400/30 bg-blue-700 hover:bg-blue-600 text-white",
+  blue: "border-blue-300 bg-[#2563EB] hover:bg-[#1D4ED8] text-white",
   green: "border-emerald-400/30 bg-emerald-600 hover:bg-emerald-500 text-white",
   yellow: "border-amber-200/40 bg-amber-300 hover:bg-amber-200 text-slate-950",
 };
@@ -378,7 +378,7 @@ function WildColorDialog({
   return (
     <div
       ref={ref}
-      className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/85 px-4"
+      className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/85 px-4 py-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="wild-color-title"
@@ -390,24 +390,24 @@ function WildColorDialog({
     >
       <div
         data-wild-card
-        className="w-full max-w-sm rounded-3xl border border-slate-700 bg-slate-900 p-6 sm:p-7"
+        className="my-auto w-full max-w-sm rounded-3xl border border-slate-200 bg-[#FFF8F2] p-5 text-slate-900 shadow-2xl sm:p-7"
       >
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-300 via-blue-700 to-emerald-400 text-xl font-black">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-300 via-blue-600 to-emerald-400 text-xl font-black text-slate-950 sm:h-14 sm:w-14">
           CF
         </div>
 
         <h2
           id="wild-color-title"
-          className="mt-4 text-center text-2xl font-black"
+          className="mt-3 text-center text-xl font-black sm:mt-4 sm:text-2xl"
         >
           Choose a color
         </h2>
 
-        <p className="mt-2 text-center text-sm text-slate-400">
+        <p className="mt-2 text-center text-sm text-slate-600">
           Which color should the next player match?
         </p>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:mt-6 sm:gap-4">
           {validColors.map((color) => (
             <button
               key={color}
@@ -415,7 +415,7 @@ function WildColorDialog({
               type="button"
               onClick={() => onChoose(color)}
               className={
-                "min-h-20 rounded-2xl border text-base font-extrabold capitalize " +
+                "min-h-14 !rotate-0 !transform-none rounded-xl border text-sm font-bold capitalize shadow-sm transition-colors sm:min-h-16 sm:rounded-2xl sm:text-base " +
                 colorPickerStyles[color]
               }
             >
@@ -427,7 +427,7 @@ function WildColorDialog({
         <button
           type="button"
           onClick={onClose}
-          className="mt-4 min-h-11 w-full rounded-xl border border-slate-700 px-4 text-sm font-semibold text-slate-300 hover:bg-slate-800"
+          className="mt-4 min-h-11 w-full rounded-xl border border-[#D9C5BB] px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-[#F3E8DF]"
         >
           Cancel
         </button>
@@ -478,11 +478,51 @@ export default function Home() {
     gayatri: " Gaie is here!",
     sandeepa: "✨ cutie pie is here!",
     anushka: "🌸 Dhoni Dhoni!",
+    jenny: "jennie",
+    jennie: "jennie",
+    riya: "hehehehe",
+    soyam: "soyam",
+    swayamshree: "artist",
+    swayam: "artist",
+    god:"god",
+    subha:"little boy was here"
   };
   const specialReactions: Record<string, { message: string; gif: string }> = {
     king: {
       message: "👑 The King has arrived!",
       gif: "/reaction/king.gif",
+    },
+    subha: {
+      message: "👑 The King has arrived!",
+      gif: "/reaction/subha.gif",
+    },
+    jenny: {
+      message: "jenny has arrived!",
+      gif: "/reaction/dog.gif",
+    },
+    jennie: {
+      message: "jenny has arrived!",
+      gif: "/reaction/jenny.gif",
+    },
+    riya: {
+      message: "riya has arrived!",
+      gif: "/reaction/riya.gif",
+    },
+    soyam: {
+      message: "👑 The King has arrived!",
+      gif: "/reaction/king.gif",
+    },
+    god: {
+      message: "im already here!",
+      gif: "/reaction/god.gif",
+    },
+    swayamshree: {
+      message: "empty",
+      gif: "/reaction/soyam.gif",
+    },
+    swayam: {
+      message: "👑 The King has arrived!",
+      gif: "/reaction/soyam.gif",
     },
     queen: {
       message: "👸 The Queen has arrived!",
