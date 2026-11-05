@@ -116,11 +116,6 @@ function makeGuestName(): string {
 
   return adjective + noun + number;
 }
-
-/* ------------------------------------------------------------------ */
-/* Animation helpers                                                   */
-/* ------------------------------------------------------------------ */
-
 const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -146,7 +141,6 @@ function ShowcaseFallback({ label }: { label: string }) {
     "bg-emerald-600",
     "bg-blue-700",
   ];
-
   return (
     <div
       role="status"
@@ -471,15 +465,20 @@ export default function Home() {
   const seenPlayersRef = useRef<Set<string>>(new Set());
   const seenCardsRef = useRef<Set<string>>(new Set());
   const prevTopCardRef = useRef<string | null>(null);
-
+  // Game result sound refs
+  const victoryAudioRef = useRef<HTMLAudioElement | null>(null);
+  const defeatAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previousResultRef = useRef<string | null>(null);
+  const gameStartAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previousGameStartRef = useRef<string | null>(null);
   const specialNames: Record<string, string> = {
     king: "👑 The King has arrived!",
     queen: "👸 The Queen has arrived!",
     gayatri: " Gaie is here!",
     sandeepa: "✨ cutie pie is here!",
     sandeep: "✨ cutie pie is here!",
-    panda:" 🐼 Panda is here!",
-    pandasir:" 🐼 Panda is here!",
+    panda: " 🐼 Panda is here!",
+    pandasir: " 🐼 Panda is here!",
     anushka: "🌸 Dhoni Dhoni!",
     jenny: "jennie",
     jennie: "jennie",
@@ -487,8 +486,8 @@ export default function Home() {
     soyam: "soyam",
     swayamshree: "artist",
     swayam: "artist",
-    god:"god",
-    subha:"little boy was here"
+    god: "god",
+    subha: "little boy was here",
   };
   const specialReactions: Record<string, { message: string; gif: string }> = {
     king: {
@@ -499,11 +498,11 @@ export default function Home() {
       message: "👑 The King has arrived!",
       gif: "/reaction/subha.gif",
     },
-     panda: {
+    panda: {
       message: " The panda has arrived!",
       gif: "/reaction/panda.gif",
     },
-     pandasir: {
+    pandasir: {
       message: " The panda has arrived!",
       gif: "/reaction/panda.gif",
     },
@@ -1062,9 +1061,57 @@ export default function Home() {
   const roomStatus = room?.status ?? null;
   const topCardId = topCard?.id ?? null;
 
-  /* ---------------------------- GSAP effects ---------------------------- */
+  useEffect(() => {
+    if (!room || room.status !== "playing") {
+      if (room?.status === "waiting") {
+        previousGameStartRef.current = null;
+      }
+      return;
+    }
 
-  // Header: slide in + gently wobbling logo badge (runs once)
+    const startKey = room.roomId + ":started";
+
+    if (previousGameStartRef.current === startKey) {
+      return;
+    }
+
+    previousGameStartRef.current = startKey;
+
+    const audio = gameStartAudioRef.current;
+
+    if (audio) {
+      audio.currentTime = 0;
+
+      audio.play().catch((error: unknown) => {
+        console.warn("Unable to play game start sound:", error);
+      });
+    }
+  }, [room?.roomId, roomStatus]);
+  useEffect(() => {
+    if (roomStatus !== "finished" || !game?.winnerId || !room) {
+      return;
+    }
+
+    const isWinner = game.winnerId === playerId;
+    const resultKey = room.roomId + ":" + game.winnerId + ":" + playerId;
+
+    if (previousResultRef.current === resultKey) {
+      return;
+    }
+
+    previousResultRef.current = resultKey;
+
+    const audio = isWinner ? victoryAudioRef.current : defeatAudioRef.current;
+
+    if (audio) {
+      audio.currentTime = 0;
+
+      audio.play().catch((error: unknown) => {
+        console.warn("Unable to play game result sound:", error);
+      });
+    }
+  }, [roomStatus, game?.winnerId, playerId, room?.roomId]);
+
   useIsomorphicLayoutEffect(() => {
     const mm = gsap.matchMedia();
 
@@ -1409,6 +1456,15 @@ export default function Home() {
 
   return (
     <main ref={mainRef} className="min-h-screen overflow-x-hidden text-white">
+      <audio
+  ref={gameStartAudioRef}
+  src="/sounds/game-start.mp3"
+  preload="auto"
+/>
+      {/* Game result sounds */}
+      <audio ref={victoryAudioRef} src="/sounds/victory.mp3" preload="auto" />
+
+      <audio ref={defeatAudioRef} src="/sounds/defeat.mp3" preload="auto" />
       {/* Winner celebration overlay */}
       {roomStatus === "finished" && game?.winnerId && (
         <div
@@ -2034,17 +2090,15 @@ export default function Home() {
               /* Game board */
               <div
                 data-panel
-                className="game-table relative mt-3 min-h-[620px] overflow-hidden p-2 sm:mt-8 sm:min-h-[760px] sm:p-6 md:p-8"
+                className="game-table relative mt-3 min-h-[850px] overflow-visible p-2 pb-8 sm:mt-8 sm:min-h-[900px] sm:p-6 md:p-8"
               >
                 <div className="game-table-glow" />
-
                 {/* Confetti layer (winner) */}
                 <div
                   ref={confettiRef}
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-0 z-20 overflow-hidden rounded-[inherit]"
                 />
-
                 {/* Game header */}
                 <div className="relative z-10 flex flex-wrap items-center justify-between gap-4">
                   <div>
@@ -2079,13 +2133,10 @@ export default function Home() {
                     />
                   </div>
                 </div>
-
                 {/* Opponent card stacks around the table */}
-                <div className="pointer-events-none absolute inset-0 z-10">
-                  {room.players.map((player, index) => {
-                    const isYou = player.id === playerId;
-
-                    if (isYou) return null;
+                <div className="pointer-events-none absolute inset-0 z-30">
+                  {room.players.map((player) => {
+                    if (player.id === playerId) return null;
 
                     const opponentIndex = room.players
                       .filter((candidate) => candidate.id !== playerId)
@@ -2099,15 +2150,15 @@ export default function Home() {
                     } else if (room.players.length === 3) {
                       seatPosition =
                         opponentIndex === 0
-                          ? "left-3 top-[33%] w-[25%] -translate-y-1/2 sm:left-5 sm:w-[min(26%,200px)]"
-                          : "right-0 top-[33%] w-[22%] -translate-y-1/2 sm:right-5 sm:w-[min(26%,200px)]";
+                          ? "left-3 top-[33%] w-[25%] -translate-y-1/2"
+                          : "right-0 top-[33%] w-[22%] -translate-y-1/2";
                     } else {
                       seatPosition =
                         opponentIndex === 0
                           ? "left-1/2 top-[10%] w-[min(54%,220px)] -translate-x-1/2"
                           : opponentIndex === 1
-                            ? "left-8 top-[22%] w-[20%] -translate-y-1/2 sm:left-5 sm:w-[min(27%,170px)]"
-                            : "right-0 top-[22%] w-[20%] -translate-y-1/2 sm:right-5 sm:w-[min(27%,170px)]";
+                            ? "left-2 top-[22%] w-[20%] -translate-y-1/2"
+                            : "right-2 top-[22%] w-[20%] -translate-y-1/2";
                     }
 
                     const isSideSeat =
@@ -2119,49 +2170,45 @@ export default function Home() {
                       <div
                         key={player.id}
                         className={
-                          "pointer-events-none absolute z-30 overflow-visible bg-transparent " +
+                          "absolute z-30 flex flex-col items-center overflow-visible " +
                           seatPosition
                         }
                       >
+                        {/* Opponent information */}
+                        <div className="relative z-[100] mb-3 flex items-center justify-center gap-2 whitespace-nowrap rounded-full border border-white/20 bg-[#54151D] px-3 py-2 shadow-lg">
+                          <span className="max-w-[120px] truncate text-xs font-extrabold text-white">
+                            {player.name}
+                          </span>
+                          <span className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold text-yellow-200">
+                            🃏 {player.cardCount}
+                          </span>
+                        </div>
+
+                        {/* Opponent cards */}
                         <div
                           className={
-                            "relative mx-auto flex w-full items-center justify-center overflow-visible " +
-                            (isSideSeat
-                              ? "h-[250px] sm:h-[300px]"
-                              : "h-[112px] sm:h-[140px]")
-                          }
-                          aria-label={
-                            "Opponent has " + player.cardCount + " cards"
+                            "relative flex w-full items-center justify-center overflow-visible " +
+                            (isSideSeat ? "h-[220px]" : "h-[100px]")
                           }
                         >
                           {Array.from({ length: player.cardCount }).map(
                             (_, cardIndex) => {
                               const cardCount = Math.max(player.cardCount, 1);
-                              const cardWidth = isSideSeat ? 38 : 52;
-                              const cardHeight = isSideSeat ? 54 : 74;
-                              const spacing = isSideSeat ? 9 : 15;
                               const offset = cardIndex - (cardCount - 1) / 2;
 
-                              const isRightSideSeat =
-                                room.players.length >= 4 && opponentIndex === 2;
-
-                              const sideRotation =
-                                opponentIndex === 1 ? 90 : -90;
+                              const spacing = isSideSeat ? 9 : 15;
+                              const cardWidth = isSideSeat ? 38 : 52;
+                              const cardHeight = isSideSeat ? 54 : 74;
 
                               const rotation = isSideSeat
-                                ? sideRotation +
-                                  offset * (isRightSideSeat ? -1.8 : 1.8)
+                                ? (opponentIndex === 1 ? 90 : -90) +
+                                  offset * 1.8
                                 : offset * 1.8;
 
                               return (
                                 <div
                                   key={player.id + "-card-" + cardIndex}
-                                  className={
-                                    "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden border-[3px] border-white bg-black shadow-[0_5px_12px_rgba(0,0,0,0.28)] " +
-                                    (isSideSeat
-                                      ? "rounded-[9px] sm:rounded-[10px]"
-                                      : "rounded-[13px] sm:rounded-[15px]")
-                                  }
+                                  className="absolute left-1/2 top-1/2 overflow-hidden rounded-xl border-[3px] border-white bg-black shadow-lg"
                                   style={{
                                     width: cardWidth + "px",
                                     height: cardHeight + "px",
@@ -2179,21 +2226,9 @@ export default function Home() {
                                   }}
                                 >
                                   <div className="absolute left-[-35%] top-[22%] h-[54%] w-[170%] rotate-[-35deg] rounded-[50%] bg-red-600" />
-                                  <div className="absolute left-[7%] top-[31%] h-[38%] w-[86%] rotate-[-35deg] rounded-[50%] border-2 border-white/95" />
+                                  <div className="absolute left-[7%] top-[31%] h-[38%] w-[86%] rotate-[-35deg] rounded-[50%] border-2 border-white" />
                                   <div className="absolute inset-0 flex items-center justify-center">
-                                    <span
-                                      className={
-                                        "relative -rotate-[25deg] font-black italic tracking-tight text-yellow-400 " +
-                                        (isSideSeat
-                                          ? "text-[9px]"
-                                          : "text-[11px] sm:text-sm")
-                                      }
-                                      style={{
-                                        WebkitTextStroke: "0.7px white",
-                                        textShadow:
-                                          "2px 2px 0 #111, -1px -1px 0 #111",
-                                      }}
-                                    >
+                                    <span className="relative -rotate-[25deg] text-[11px] font-black italic text-yellow-400">
                                       UNO
                                     </span>
                                   </div>
@@ -2206,9 +2241,7 @@ export default function Home() {
                     );
                   })}
                 </div>
-
                 {/* Central card piles */}
-
                 <div className="absolute left-1/2 top-[53%] z-10 flex min-h-40 w-[min(68%,500px)] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-3 rounded-[999px] border-2 border-yellow-400/80 bg-[#17345F]/45 px-3 py-4 shadow-[0_0_0_10px_rgba(245,197,107,0.07),inset_0_0_30px_rgba(0,0,0,0.12)] sm:top-1/2 sm:min-h-56 sm:w-[min(66%,500px)] sm:gap-10 sm:px-3 sm:py-8">
                   <div className="game-pile">
                     {/* <p className="mb-3 text-[10px] font-black tracking-[0.2em] text-sky-100/80 sm:text-xs">
@@ -2286,7 +2319,6 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-
                 {/* Player hand */}
                 <div className="absolute bottom-3 left-2 right-2 z-10 sm:bottom-4 sm:left-8 sm:right-8">
                   <PlayerHand
@@ -2300,7 +2332,6 @@ export default function Home() {
                     }
                   />
                 </div>
-
                 <GameControls
                   onDrawCard={drawCard}
                   onPassTurn={passTurn}
@@ -2326,7 +2357,7 @@ export default function Home() {
                   leaveRoom();
                 }
               }}
-              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200/30 bg-red-600/50 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#102746]/80"
+              className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-sky-200/30 bg-red-600/50 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-600"
             >
               <span aria-hidden="true">↗</span>
               Leave Room

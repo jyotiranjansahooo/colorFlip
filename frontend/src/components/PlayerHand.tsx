@@ -20,44 +20,56 @@ export default function PlayerHand({
     const middle = (total - 1) / 2;
     const distance = index - middle;
 
-    const maxRotation = Math.min(16, total * 1.5);
+    const maxRotation = Math.min(12, total * 1.2);
     const rotation =
       total > 1 && middle > 0 ? (distance / middle) * maxRotation : 0;
 
-    const verticalOffset = Math.abs(distance) * 1.2;
+    const verticalOffset = Math.min(Math.abs(distance) * 0.8, 12);
 
     return {
       transform:
         "translateY(" + verticalOffset + "px) rotate(" + rotation + "deg)",
       transformOrigin: "50% 115%",
-      marginLeft: index === 0 ? "0" : "-30px",
+      marginLeft: index === 0 ? "0px" : "-24px",
       zIndex: index + 1,
     };
   };
 
   return (
-    <section className="relative z-20 mx-auto w-full min-w-0 px-0 pb-1 sm:px-1 sm:pb-2">
+    <section className="relative z-20 mx-auto w-full min-w-0 px-0 pb-2">
       {cards.length > 0 ? (
-        <div className="flex w-full justify-center overflow-x-auto overflow-y-hidden px-1 pb-2 pt-3 sm:overflow-x-visible sm:px-2 sm:pb-3 sm:pt-5">
-          <div className="flex min-w-max items-end justify-center px-3 sm:px-5">
-            {cards.map((card, index) => (
-              <div
-                key={card.id}
-                data-hand-card
-                data-card-id={card.id}
-                style={getFanStyle(index)}
-                className="relative shrink-0 transition-transform duration-200 hover:z-[100] hover:-translate-y-4"
-              >
-                <PlayingCard
-                  card={card}
-                  onPlay={onPlayCard}
-                  disabled={disabled}
-                  colorClass={getCardColorClass(card)}
-                />
-              </div>
-            ))}
+        <>
+          <div
+            className="w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain touch-pan-x px-2 pb-6 pt-5 sm:px-5 sm:pb-6"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "thin",
+            }}
+          >
+            <div className="flex min-w-max items-end justify-start px-4 sm:justify-center sm:px-6">
+              {cards.map((card, index) => (
+                <div
+                  key={card.id}
+                  data-hand-card
+                  data-card-id={card.id}
+                  style={getFanStyle(index)}
+                  className="relative shrink-0 transition-transform duration-200 hover:z-[100] hover:-translate-y-4"
+                >
+                  <PlayingCard
+                    card={card}
+                    onPlay={onPlayCard}
+                    disabled={disabled}
+                    colorClass={getCardColorClass(card)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+
+          <p className="mt-1 text-center text-[10px] font-semibold text-white/60 sm:hidden">
+            Swipe horizontally to see all {cards.length} cards
+          </p>
+        </>
       ) : (
         <p className="py-4 text-center text-sm text-white/60">
           No cards in your hand.
