@@ -1483,12 +1483,12 @@ export default function Home() {
                     event.target.value
                       .toUpperCase()
                       .replace(/[^A-Z0-9]/g, "")
-                      .slice(0, 6),
+                      .slice(0, 4),
                   )
                 }
-                maxLength={6}
+                maxLength={4}
                 autoCapitalize="characters"
-                placeholder="e.g. A1B2C3"
+                placeholder="e.g. A1B2"
                 className="mt-2 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 uppercase tracking-widest outline-none focus:border-sky-400"
               />
 

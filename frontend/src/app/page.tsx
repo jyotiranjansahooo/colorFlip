@@ -445,7 +445,7 @@ export default function Home() {
     return (invitedRoom ?? "")
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 6);
+      .slice(0, 4);
   });
   const autoJoinAttempted = useRef(false);
   const [playerId, setPlayerId] = useState("");
@@ -726,7 +726,7 @@ export default function Home() {
       const invitedRoom = (params.get("room") ?? "")
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, "")
-        .slice(0, 6);
+        .slice(0, 4);
 
       if (!invitedRoom || autoJoinAttempted.current) {
         return;
@@ -1457,10 +1457,10 @@ export default function Home() {
   return (
     <main ref={mainRef} className="min-h-screen overflow-x-hidden text-white">
       <audio
-  ref={gameStartAudioRef}
-  src="/sounds/game-start.mp3"
-  preload="auto"
-/>
+        ref={gameStartAudioRef}
+        src="/sounds/game-start.mp3"
+        preload="auto"
+      />
       {/* Game result sounds */}
       <audio ref={victoryAudioRef} src="/sounds/victory.mp3" preload="auto" />
 
@@ -1755,12 +1755,12 @@ export default function Home() {
                       event.target.value
                         .toUpperCase()
                         .replace(/[^A-Z0-9]/g, "")
-                        .slice(0, 6),
+                        .slice(0, 4),
                     )
                   }
-                  maxLength={6}
+                  maxLength={4}
                   autoCapitalize="characters"
-                  placeholder="e.g. A1B2C3"
+                  placeholder="e.g. A1B2"
                   className="mt-2 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 uppercase tracking-widest outline-none focus:border-sky-400"
                 />
                 <button

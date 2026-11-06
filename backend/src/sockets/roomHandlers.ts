@@ -170,7 +170,7 @@ function createRoomCode(): string {
   let roomId = "";
 
   do {
-    roomId = randomBytes(3).toString("hex").toUpperCase();
+    roomId = randomBytes(2).toString("hex").toUpperCase();
   } while (rooms.has(roomId));
 
   return roomId;
@@ -1038,8 +1038,8 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   const roomId = payload.roomId.trim().toUpperCase();
   const name = normalizeNickname(payload.name);
 
-  if (!/^[A-F0-9]{6}$/.test(roomId)) {
-    emitRoomError(socket, "Enter a valid 6-character room code.");
+  if (!/^[A-F0-9]{4}$/.test(roomId)) {
+    emitRoomError(socket, "Enter a valid 4-character room code.");
     return;
   }
 
