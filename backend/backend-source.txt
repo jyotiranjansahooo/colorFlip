@@ -1420,7 +1420,7 @@ describe("ColorFlip room handlers", () => {
 
     const result = await createRoom(host, "swiftotter");
 
-    expect(result.created.roomId).toMatch(/^[A-F0-9]{6}$/);
+expect(result.created.roomId).toMatch(/^[A-F0-9]{4}$/);
     expect(result.created.playerId).toBeTruthy();
 
     expect(result.state.roomId).toBe(result.created.roomId);
@@ -2504,8 +2504,8 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   const roomId = payload.roomId.trim().toUpperCase();
   const name = normalizeNickname(payload.name);
 
-  if (!/^[A-F0-9]{6}$/.test(roomId)) {
-    emitRoomError(socket, "Enter a valid 6-character room code.");
+  if (!/^[A-F0-9]{4}$/.test(roomId)) {
+    emitRoomError(socket, "Enter a valid 4-character room code.");
     return;
   }
 
@@ -2819,4 +2819,3 @@ export function registerRoomHandlers(io: Server, socket: Socket): void {
     handleDisconnect(socket, io);
   });
 }
-

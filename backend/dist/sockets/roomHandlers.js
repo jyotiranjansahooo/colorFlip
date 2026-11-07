@@ -62,8 +62,9 @@ function normalizeNickname(value) {
 function createRoomCode() {
     let roomId = "";
     do {
-        roomId = randomBytes(3).toString("hex").toUpperCase();
+        roomId = randomBytes(2).toString("hex").toUpperCase();
     } while (rooms.has(roomId));
+    console.log("[ROOM CODE DEBUG]", roomId, "LENGTH:", roomId.length);
     return roomId;
 }
 function createComputerPlayer(index) {
@@ -697,8 +698,8 @@ function handleJoinRoom(socket, payload, io) {
     }
     const roomId = payload.roomId.trim().toUpperCase();
     const name = normalizeNickname(payload.name);
-    if (!/^[A-F0-9]{6}$/.test(roomId)) {
-        emitRoomError(socket, "Enter a valid 6-character room code.");
+    if (!/^[A-F0-9]{4}$/.test(roomId)) {
+        emitRoomError(socket, "Enter a valid 4-character room code.");
         return;
     }
     const room = rooms.get(roomId);
@@ -816,14 +817,14 @@ function handleUpdateRoomSettings(socket, payload, io) {
         console.error("Failed to save room settings:", error);
     });
 }
-function handleStartRoom(socket, io) {
+function handleStartRoom(socket, io, allowAnyPlayer = false) {
     const sessionData = getSessionRoom(socket);
     if (!sessionData) {
         emitRoomError(socket, "Join a room first.");
         return;
     }
     const { room, player } = sessionData;
-    if (room.hostId !== player.id) {
+    if (!allowAnyPlayer && room.hostId !== player.id) {
         emitRoomError(socket, "Only the room host can start the game.");
         return;
     }
@@ -880,6 +881,24 @@ function handleStartRoom(socket, io) {
         console.error("Failed to start game:", error);
         emitRoomError(socket, "Unable to start the game. Please try again.");
     }
+}
+function handlePlayAgain(socket, io) {
+    const sessionData = getSessionRoom(socket);
+    if (!sessionData) {
+        emitRoomError(socket, "Join a room first.");
+        return;
+    }
+    const { room } = sessionData;
+    if (room.status !== "finished") {
+        emitRoomError(socket, "The current game has not finished.");
+        return;
+    }
+    // Remove old computer players before creating the next match.
+    room.players = room.players.filter((player) => !player.isComputer);
+    room.game = null;
+    room.status = "waiting";
+    // Any player can request a rematch.
+    handleStartRoom(socket, io, true);
 }
 function handlePlayCard(socket, payload, io) {
     if (!isRecord(payload) ||
@@ -1045,6 +1064,9 @@ function handleKickPlayer(socket, payload, io) {
 export function registerRoomHandlers(io, socket) {
     socket.on("room:reconnect", (payload) => {
         handleReconnect(socket, payload, io);
+    });
+    socket.on("room:play-again", () => {
+        handlePlayAgain(socket, io);
     });
     socket.on("room:player:kick", (payload) => {
         handleKickPlayer(socket, payload, io);

@@ -76,7 +76,7 @@ export default function PlayingCard({
   const cornerLabel = isDrawFour ? "+4" : label;
 
   const background = isDrawFour
-    ? "linear-gradient(145deg, #172554 0%, #1D4ED8 55%, #60A5FA 100%)"
+    ? "linear-gradient(145deg, #0284C7 0%, #2563EB 55%, #38BDF8 100%)"
     : isWild
       ? "linear-gradient(135deg, #ED1C2E 0%, #ED1C2E 25%, #0878F9 25%, #0878F9 50%, #35AD50 50%, #35AD50 75%, #FFD928 75%, #FFD928 100%)"
       : getCardColor(card.color);

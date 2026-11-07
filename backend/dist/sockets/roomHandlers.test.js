@@ -114,7 +114,7 @@ describe("ColorFlip room handlers", () => {
     it("creates a room and returns its details", async () => {
         const host = await connectClient();
         const result = await createRoom(host, "swiftotter");
-        expect(result.created.roomId).toMatch(/^[A-F0-9]{6}$/);
+        expect(result.created.roomId).toMatch(/^[A-F0-9]{4}$/);
         expect(result.created.playerId).toBeTruthy();
         expect(result.state.roomId).toBe(result.created.roomId);
         expect(result.state.status).toBe("waiting");

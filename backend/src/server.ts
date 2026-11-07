@@ -49,6 +49,7 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("Player disconnected:", socket.id);
   });
+  
 });
 
 async function startServer(): Promise<void> {

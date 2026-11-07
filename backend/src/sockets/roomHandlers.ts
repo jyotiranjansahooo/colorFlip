@@ -173,6 +173,8 @@ function createRoomCode(): string {
     roomId = randomBytes(2).toString("hex").toUpperCase();
   } while (rooms.has(roomId));
 
+  console.log("[LOCAL GENERATOR]", roomId, roomId.length);
+
   return roomId;
 }
 function createComputerPlayer(index: number): Player {
@@ -984,6 +986,11 @@ function handleCreateRoom(socket: Socket, payload: unknown, io: Server): void {
   }
 
   const roomId = createRoomCode();
+  console.log("[CREATE ROOM]", {
+    roomId,
+    length: roomId.length,
+    source: "ColorFlip 4-character generator",
+  });
   const player = createPlayer(name);
   (player as Player & { avatarId?: PlayerAvatarId }).avatarId =
     DEFAULT_AVATAR_ID;
@@ -1038,10 +1045,10 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   const roomId = payload.roomId.trim().toUpperCase();
   const name = normalizeNickname(payload.name);
 
-  if (!/^[A-F0-9]{4}$/.test(roomId)) {
-    emitRoomError(socket, "Enter a valid 4-character room code.");
-    return;
-  }
+if (!/^[A-F0-9]{6}$/.test(roomId)) {
+  emitRoomError(socket, "Enter a valid 6-character room code.");
+  return;
+}
 
   const room = rooms.get(roomId);
 
@@ -1215,7 +1222,11 @@ function handleUpdateRoomSettings(
     console.error("Failed to save room settings:", error);
   });
 }
-function handleStartRoom(socket: Socket, io: Server): void {
+function handleStartRoom(
+  socket: Socket,
+  io: Server,
+  allowAnyPlayer = false,
+): void {
   const sessionData = getSessionRoom(socket);
 
   if (!sessionData) {
@@ -1225,7 +1236,7 @@ function handleStartRoom(socket: Socket, io: Server): void {
 
   const { room, player } = sessionData;
 
-  if (room.hostId !== player.id) {
+  if (!allowAnyPlayer && room.hostId !== player.id) {
     emitRoomError(socket, "Only the room host can start the game.");
     return;
   }
@@ -1309,7 +1320,30 @@ function handleStartRoom(socket: Socket, io: Server): void {
     emitRoomError(socket, "Unable to start the game. Please try again.");
   }
 }
+function handlePlayAgain(socket: Socket, io: Server): void {
+  const sessionData = getSessionRoom(socket);
 
+  if (!sessionData) {
+    emitRoomError(socket, "Join a room first.");
+    return;
+  }
+
+  const { room } = sessionData;
+
+  if (room.status !== "finished") {
+    emitRoomError(socket, "The current game has not finished.");
+    return;
+  }
+
+  // Remove old computer players before creating the next match.
+  room.players = room.players.filter((player) => !player.isComputer);
+
+  room.game = null;
+  room.status = "waiting";
+
+  // Any player can request a rematch.
+  handleStartRoom(socket, io, true);
+}
 function handlePlayCard(socket: Socket, payload: unknown, io: Server): void {
   if (
     !isRecord(payload) ||
@@ -1552,6 +1586,9 @@ function handleKickPlayer(socket: Socket, payload: unknown, io: Server): void {
 export function registerRoomHandlers(io: Server, socket: Socket): void {
   socket.on("room:reconnect", (payload: unknown) => {
     handleReconnect(socket, payload, io);
+  });
+  socket.on("room:play-again", () => {
+    handlePlayAgain(socket, io);
   });
   socket.on("room:player:kick", (payload: unknown) => {
     handleKickPlayer(socket, payload, io);

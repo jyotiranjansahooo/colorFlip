@@ -445,7 +445,7 @@ export default function Home() {
     return (invitedRoom ?? "")
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 4);
+      .slice(0, 6);
   });
   const autoJoinAttempted = useRef(false);
   const [playerId, setPlayerId] = useState("");
@@ -726,7 +726,7 @@ export default function Home() {
       const invitedRoom = (params.get("room") ?? "")
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, "")
-        .slice(0, 4);
+        .slice(0, 6);
 
       if (!invitedRoom || autoJoinAttempted.current) {
         return;
@@ -873,7 +873,15 @@ export default function Home() {
 
     socket.emit("room:player:avatar", { avatarId });
   }
+  function playAgain() {
+    if (!socket.connected) {
+      setError("Connection lost. Please reconnect.");
+      return;
+    }
 
+    setError("");
+    socket.emit("room:play-again");
+  }
   function startGame() {
     setError("");
     socket.emit("room:start");
@@ -1515,7 +1523,7 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={() => window.location.reload()}
+                onClick={playAgain}
                 className="min-h-12 w-full rounded-xl border border-yellow-300/60 px-5 py-3 font-bold text-white transition hover:bg-white/10"
               >
                 🔄 Play Again
@@ -1755,12 +1763,12 @@ export default function Home() {
                       event.target.value
                         .toUpperCase()
                         .replace(/[^A-Z0-9]/g, "")
-                        .slice(0, 4),
+                        .slice(0, 6),
                     )
                   }
-                  maxLength={4}
+                  maxLength={6}
                   autoCapitalize="characters"
-                  placeholder="e.g. A1B2"
+                  placeholder="e.g. A1B2C3"
                   className="mt-2 min-h-12 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 uppercase tracking-widest outline-none focus:border-sky-400"
                 />
                 <button
