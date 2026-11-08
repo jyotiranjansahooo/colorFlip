@@ -672,7 +672,32 @@ export default function Home() {
           : currentNotice,
       );
     };
+    const handleRoomKicked = (payload: { message?: string }) => {
+      const message = payload?.message ?? "You were kicked out by the host.";
 
+      // Clear saved reconnect credentials.
+      localStorage.removeItem(RECONNECT_STORAGE_KEY);
+
+      reconnectingRef.current = false;
+
+      // Return the player to the home screen.
+      setRoom(null);
+      setRoomCode("");
+      setPlayerId("");
+
+      setIsConnecting(false);
+      setIsReconnecting(false);
+      setWildCard(null);
+
+      seenPlayersRef.current.clear();
+      seenCardsRef.current.clear();
+      prevTopCardRef.current = null;
+
+      window.history.replaceState({}, "", window.location.pathname);
+
+      setError("");
+      setNotice(message);
+    };
     const handleRoomError = (payload: RoomErrorPayload) => {
       setIsConnecting(false);
 
@@ -705,6 +730,7 @@ export default function Home() {
     socket.on("room:reconnected", handleRoomReconnected);
     socket.on("room:state", handleRoomState);
     socket.on("room:error", handleRoomError);
+    socket.on("room:kicked", handleRoomKicked);
     socket.on("connect_error", handleConnectError);
 
     return () => {
@@ -714,6 +740,7 @@ export default function Home() {
       socket.off("room:joined", handleRoomJoined);
       socket.off("room:reconnected", handleRoomReconnected);
       socket.off("room:state", handleRoomState);
+      socket.off("room:kicked", handleRoomKicked);
       socket.off("room:error", handleRoomError);
       socket.off("connect_error", handleConnectError);
     };
