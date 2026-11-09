@@ -1501,64 +1501,149 @@ export default function Home() {
 
       <audio ref={defeatAudioRef} src="/sounds/defeat.mp3" preload="auto" />
       {/* Winner celebration overlay */}
+
+      {/* Responsive Winner Celebration and Match Results */}
       {roomStatus === "finished" && game?.winnerId && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black/50 px-5 backdrop-blur-md"
+          className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-slate-950/85 p-3 backdrop-blur-md sm:p-5"
           role="dialog"
           aria-modal="true"
           aria-labelledby="winner-title"
         >
           <div
             data-winner
-            className="relative w-full max-w-md rounded-3xl border-2 border-sky-300/70 bg-gradient-to-br from-[#285A91] via-[#17345F] to-[#102746] p-8 text-center shadow-[0_0_80px_rgba(250,204,21,0.35)] sm:p-10"
+            className="relative my-auto w-full max-w-lg overflow-hidden rounded-3xl border border-sky-300/30 bg-gradient-to-br from-[#285A91] via-[#17345F] to-[#102746] p-4 shadow-2xl shadow-sky-950/50 sm:p-7"
           >
-            {/* Trophy */}
-            <div className="mb-4 text-6xl sm:text-7xl">🏆</div>
+            {/* Decorative background */}
+            <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-yellow-300/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-48 w-48 rounded-full bg-sky-400/10 blur-3xl" />
 
-            {/* Celebration heading */}
-            <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-300 sm:text-base">
-              Game Over
-            </p>
+            <div className="relative z-10">
+              {/* Winner heading */}
+              <div className="text-center">
+                <div className="text-5xl sm:text-6xl">
+                  {game.winnerId === playerId ? "🏆" : "🎮"}
+                </div>
 
-            <h2
-              id="winner-title"
-              className="mt-4 text-3xl font-black leading-tight text-white sm:text-5xl"
-            >
-              🎉 {winnerName} 🎉
-            </h2>
+                <p className="mt-3 text-xs font-black uppercase tracking-[0.25em] text-yellow-300 sm:text-sm">
+                  ColorFlip · Match Completed
+                </p>
 
-            <p className="mt-4 text-lg font-bold text-yellow-200 sm:text-xl">
-              {game?.winnerId === playerId ? "YOU WON! 🎉" : "YOU LOST! 😢"}
-            </p>
+                <h2
+                  id="winner-title"
+                  className="mt-3 text-3xl font-black text-white sm:text-4xl"
+                >
+                  {game.winnerId === playerId ? "YOU WON! 🎉" : "YOU LOST! 😢"}
+                </h2>
 
-            <div className="mx-auto mt-6 h-1.5 w-24 rounded-full bg-yellow-300" />
+                <p className="mt-2 break-words text-sm text-sky-100 sm:text-base">
+                  👑 {winnerName} won the match!
+                </p>
+              </div>
 
-            <p className="mt-5 text-sm text-white/80 sm:text-base">
-              {game?.winnerId === playerId
-                ? "Congratulations on winning UNO!"
-                : winnerName + " won the game. Better luck next time!"}
-            </p>
+              {/* Player standings */}
+              <div className="mt-6 rounded-2xl border border-sky-200/15 bg-slate-950/30 p-3 sm:p-5">
+                <div className="mb-4 flex items-center justify-between gap-2">
+                  <h3 className="text-base font-extrabold text-white sm:text-lg">
+                    🏅 Final Standings
+                  </h3>
 
-            <div className="mt-6 flex flex-col gap-3">
-              <button
-                type="button"
-                onClick={leaveRoom}
-                className="min-h-12 w-full rounded-xl bg-[#B7D9A8] px-5 py-3 font-bold text-[#17345F] transition hover:bg-[#D5EBCB]"
-              >
-                🏠 Back to Home
-              </button>
+                  <span className="rounded-full bg-sky-400/10 px-3 py-1 text-[10px] font-bold text-sky-200 sm:text-xs">
+                    {(room?.players ?? []).length} Players
+                  </span>
+                </div>
 
-              <button
-                type="button"
-                onClick={playAgain}
-                className="min-h-12 w-full rounded-xl border border-yellow-300/60 px-5 py-3 font-bold text-white transition hover:bg-white/10"
-              >
-                🔄 Play Again
-              </button>
+                <div className="space-y-2">
+                  {[...(room?.players ?? [])]
+                    .sort(
+                      (a, b) =>
+                        Number(b.id === game.winnerId) -
+                        Number(a.id === game.winnerId),
+                    )
+                    .map((player, index) => {
+                      const isWinner = player.id === game.winnerId;
+                      const isYou = player.id === playerId;
+
+                      return (
+                        <div
+                          key={player.id}
+                          className={
+                            "flex min-w-0 items-center justify-between gap-2 rounded-xl border p-3 sm:gap-3 sm:p-4 " +
+                            (isWinner
+                              ? "border-yellow-300/50 bg-yellow-400/10"
+                              : "border-rose-200/10 bg-rose-950/20")
+                          }
+                        >
+                          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+                            <span className="w-5 shrink-0 text-xs font-bold text-white/50">
+                              #{index + 1}
+                            </span>
+
+                            <span className="shrink-0 text-2xl sm:text-3xl">
+                              {isWinner ? "👑" : "💩"}
+                            </span>
+
+                            <div className="min-w-0">
+                              <p
+                                className={
+                                  "break-all text-sm font-extrabold sm:text-base " +
+                                  (isWinner ? "text-yellow-200" : "text-white")
+                                }
+                              >
+                                {player.name}
+                              </p>
+
+                              {isYou && (
+                                <span className="text-[10px] font-bold uppercase text-sky-300">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <span
+                            className={
+                              "shrink-0 rounded-full px-2 py-1 text-[9px] font-black sm:px-3 sm:text-xs " +
+                              (isWinner
+                                ? "bg-yellow-300/15 text-yellow-300"
+                                : "bg-rose-400/10 text-rose-300")
+                            }
+                          >
+                            {isWinner ? "WINNER" : "LOST"}
+                          </span>
+                        </div>
+                      );
+                    })}
+                </div>
+
+                <p className="mt-4 text-center text-xs text-sky-100/50">
+                  👑 Winner · 💩 Other players
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={leaveRoom}
+                  className="min-h-12 rounded-xl bg-[#B7D9A8] px-4 py-3 text-sm font-extrabold text-[#17345F] transition hover:bg-[#D5EBCB] active:scale-[0.98]"
+                >
+                  🏠 Back to Home
+                </button>
+
+                <button
+                  type="button"
+                  onClick={playAgain}
+                  className="min-h-12 rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-4 py-3 text-sm font-extrabold text-yellow-200 transition hover:bg-yellow-300/20 active:scale-[0.98]"
+                >
+                  🔄 Play Again
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+
       {specialPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="w-full max-w-md rounded-2xl border border-sky-400/40 bg-slate-900 p-6 text-center shadow-2xl">
