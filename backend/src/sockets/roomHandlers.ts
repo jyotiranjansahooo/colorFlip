@@ -1045,10 +1045,10 @@ function handleJoinRoom(socket: Socket, payload: unknown, io: Server): void {
   const roomId = payload.roomId.trim().toUpperCase();
   const name = normalizeNickname(payload.name);
 
-if (!/^[A-F0-9]{6}$/.test(roomId)) {
-  emitRoomError(socket, "Enter a valid 6-character room code.");
-  return;
-}
+  if (!/^[A-F0-9]{6}$/.test(roomId)) {
+    emitRoomError(socket, "Enter a valid 6-character room code.");
+    return;
+  }
 
   const room = rooms.get(roomId);
 
@@ -1308,7 +1308,6 @@ function handleStartRoom(
       console.error("Failed to save room after game started:", error);
     });
 
-    // If the first player is a computer, start its turn automatically.
     void processComputerTurns(io, room);
   } catch (error: unknown) {
     room.players = originalPlayers;
@@ -1320,6 +1319,7 @@ function handleStartRoom(
     emitRoomError(socket, "Unable to start the game. Please try again.");
   }
 }
+
 function handlePlayAgain(socket: Socket, io: Server): void {
   const sessionData = getSessionRoom(socket);
 
@@ -1330,20 +1330,24 @@ function handlePlayAgain(socket: Socket, io: Server): void {
 
   const { room } = sessionData;
 
-  if (room.status !== "finished") {
-    emitRoomError(socket, "The current game has not finished.");
+  if (room.status === "waiting" && room.game === null) {
+    emitRoomState(io, room);
     return;
   }
 
-  // Remove old computer players before creating the next match.
-  room.players = room.players.filter((player) => !player.isComputer);
+  if (room.status !== "finished" || !room.game) {
+    emitRoomError(socket, "The game has not finished yet.");
+    return;
+  }
 
+  // Reset the previous game.
   room.game = null;
   room.status = "waiting";
 
-  // Any player can request a rematch.
-  handleStartRoom(socket, io, true);
+  // Notify every player in the same private room.
+  emitRoomState(io, room);
 }
+
 function handlePlayCard(socket: Socket, payload: unknown, io: Server): void {
   if (
     !isRecord(payload) ||
@@ -1583,22 +1587,28 @@ function handleKickPlayer(socket: Socket, payload: unknown, io: Server): void {
 
   removePlayerFromRoom(io, room, target.id);
 }
+
 export function registerRoomHandlers(io: Server, socket: Socket): void {
   socket.on("room:reconnect", (payload: unknown) => {
     handleReconnect(socket, payload, io);
   });
+
   socket.on("room:play-again", () => {
     handlePlayAgain(socket, io);
   });
+
   socket.on("room:player:kick", (payload: unknown) => {
     handleKickPlayer(socket, payload, io);
   });
+
   socket.on("room:create", (payload: unknown) => {
     handleCreateRoom(socket, payload, io);
   });
+
   socket.on("room:player:rename", (payload: unknown) => {
     handleRenamePlayer(socket, payload, io);
   });
+
   socket.on("room:player:avatar", (payload: unknown) => {
     handleChooseAvatar(socket, payload, io);
   });
@@ -1626,6 +1636,7 @@ export function registerRoomHandlers(io: Server, socket: Socket): void {
   socket.on("disconnect", () => {
     handleDisconnect(socket, io);
   });
+
   socket.on("room:settings:update", (payload: unknown) => {
     handleUpdateRoomSettings(socket, payload, io);
   });

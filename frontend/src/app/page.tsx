@@ -666,11 +666,17 @@ export default function Home() {
       setError("");
       setIsReconnecting(false);
       reconnectingRef.current = false;
-      setNotice((currentNotice) =>
-        currentNotice === "Reconnecting to your previous game..."
-          ? "Reconnected to your game."
-          : currentNotice,
-      );
+
+      if (nextRoom.status === "waiting" && nextRoom.game === null) {
+        setWildCard(null);
+        setNotice("Back in the private room! Waiting for players.");
+      } else {
+        setNotice((currentNotice) =>
+          currentNotice === "Reconnecting to your previous game..."
+            ? "Reconnected to your game."
+            : currentNotice,
+        );
+      }
     };
     const handleRoomKicked = (payload: { message?: string }) => {
       const message = payload?.message ?? "You were kicked out by the host.";
@@ -1118,7 +1124,9 @@ export default function Home() {
       audio.currentTime = 0;
 
       audio.play().catch((error: unknown) => {
-        console.warn("Unable to play game start sound:", error);
+        if (error instanceof Error && error.name !== "NotAllowedError") {
+          console.warn("Unable to play game start sound:", error);
+        }
       });
     }
   }, [room?.roomId, roomStatus]);
